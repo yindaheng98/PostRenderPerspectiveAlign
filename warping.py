@@ -58,19 +58,25 @@ def projection(K, R, t, height, width, xyz):
     return uv
 
 
+def warp(uv, color_ref, width, height):
+    grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
+    warped = F.grid_sample(color_ref.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
+                           mode='bilinear', align_corners=True)[0, ...].type(torch.uint8)
+    return warped
+
+
 # warp a reference image to local rendered image
 with torch.device("cuda"):
     idx_loc = "output/coffee_martini/frame1/train_interp/ours_30000/renders/00001"  # local rendered image
     idx_ref = "output/coffee_martini/frame1/train_interp/ours_30000/renders/00000"  # reference image
     K, R, t, height, width, depth = read_camera_depth(idx_loc)
-    xyz = to_pcd(K, R, t, height, width, depth)  # pos in 3D space <---> pixel on local rendered image
+    xyz = to_pcd(K, R, t, height, width, depth)  # xyz[uv on local rendered image] = pos in 3D space
     K_r, R_r, t_r, height_r, width_r = read_camera(idx_ref)
-    uv = projection(K_r, R_r, t_r, height_r, width_r, xyz)  # pixel on reference <---> pixel on local rendered
+    uv = projection(K_r, R_r, t_r, height_r, width_r, xyz)  # uv[uv on local rendered image] = uv on reference
     grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
     color = torch.tensor(read_color(idx_loc))  # local rendered image
     color_ref = torch.tensor(read_color(idx_ref))  # reference image
-    warped = F.grid_sample(color_ref.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
-                           mode='bilinear', align_corners=True)[0, ...].type(torch.uint8)
+    warped = warp(uv, color_ref, width, height)  # wrap it
 
     import open3d as o3d
     pcd = o3d.geometry.PointCloud()
