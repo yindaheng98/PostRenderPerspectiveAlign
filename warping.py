@@ -60,18 +60,19 @@ def projection(K, R, t, height, width, xyz):
 
 with torch.device("cuda"):
     idx_src = "output/coffee_martini/frame1/train_interp/ours_30000/renders/00000"
-    xyz = to_pcd(*read_camera_depth(idx_src))
+    K, R, t, height, width, depth = read_camera_depth(idx_src)
+    xyz = to_pcd(K, R, t, height, width, depth)
     color_raw = read_color(idx_src)
     idx_dst = "output/coffee_martini/frame1/train_interp/ours_30000/renders/00001"
-    K, R, t, height, width = read_camera(idx_dst)
-    uv = projection(K, R, t, height, width, xyz)
-    grid = uv[..., :2] / torch.tensor([[[width, height]]]) - 0.5
+    K_r, R_r, t_r, height_r, width_r = read_camera(idx_dst)
+    uv = projection(K_r, R_r, t_r, height_r, width_r, xyz)
+    grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
     color = torch.tensor(read_color(idx_src))
     warped = F.grid_sample(color.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
                            mode='bilinear', align_corners=True)[0, ...].type(torch.uint8)
 
     import matplotlib.pyplot as plt
-    fig = plt.figure(figsize=(9, 3))
+    fig = plt.figure(figsize=(18, 6))
     axs = fig.subplots(ncols=3)
     axs[0].set_title('target')
     axs[0].imshow(cv2.imread("output/coffee_martini/frame1/train_interp/ours_30000/renders/00001.png"))
