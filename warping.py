@@ -74,7 +74,7 @@ with torch.device("cuda"):
     pcd = o3d.geometry.PointCloud()
     idx = torch.abs(xyz).sum(axis=-1) < 1000
     pcd.points = o3d.utility.Vector3dVector(xyz[idx, ...].cpu().numpy())
-    pcd.colors = o3d.utility.Vector3dVector(color[idx, ...].cpu().numpy().astype(np.float32)/255)
+    pcd.colors = o3d.utility.Vector3dVector(color[idx, ...][..., [2, 1, 0]].cpu().numpy().astype(np.float32)/255)
     o3d.visualization.draw_geometries([pcd])
 
     import matplotlib.pyplot as plt
