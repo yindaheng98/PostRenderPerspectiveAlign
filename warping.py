@@ -69,6 +69,13 @@ with torch.device("cuda"):
     color = torch.tensor(read_color(idx_src))
     warped = F.grid_sample(color.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
                            mode='bilinear', align_corners=True)[0, ...].type(torch.uint8)
+    
+    import open3d as o3d
+    pcd = o3d.geometry.PointCloud()
+    idx = torch.abs(xyz).sum(axis=-1) < 1000
+    pcd.points = o3d.utility.Vector3dVector(xyz[idx, ...].cpu().numpy())
+    pcd.colors = o3d.utility.Vector3dVector(color[idx, ...].cpu().numpy().astype(np.float32)/255)
+    o3d.visualization.draw_geometries([pcd])
 
     import matplotlib.pyplot as plt
     fig = plt.figure(figsize=(18, 6))
