@@ -59,11 +59,10 @@ def projection(K, R, t, height, width, xyz):
 
 
 with torch.device("cuda"):
-    idx_src = "output/coffee_martini/frame1/train_interp/ours_30000/renders/00000"
+    idx_src = "output/coffee_martini/frame1/train_interp/ours_30000/renders/00001"
+    idx_dst = "output/coffee_martini/frame1/train_interp/ours_30000/renders/00000"
     K, R, t, height, width, depth = read_camera_depth(idx_src)
     xyz = to_pcd(K, R, t, height, width, depth)
-    color_raw = read_color(idx_src)
-    idx_dst = "output/coffee_martini/frame1/train_interp/ours_30000/renders/00001"
     K_r, R_r, t_r, height_r, width_r = read_camera(idx_dst)
     uv = projection(K_r, R_r, t_r, height_r, width_r, xyz)
     grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
@@ -75,9 +74,9 @@ with torch.device("cuda"):
     fig = plt.figure(figsize=(18, 6))
     axs = fig.subplots(ncols=3)
     axs[0].set_title('target')
-    axs[0].imshow(cv2.imread("output/coffee_martini/frame1/train_interp/ours_30000/renders/00001.png"))
+    axs[0].imshow(read_color(idx_dst)[..., [2, 1, 0]].cpu().numpy())
     axs[1].set_title('warped')
-    axs[1].imshow(warped.permute(1, 2, 0).cpu().numpy())
+    axs[1].imshow(warped.permute(1, 2, 0)[..., [2, 1, 0]].cpu().numpy())
     axs[2].set_title('raw')
-    axs[2].imshow(color.cpu().numpy())
+    axs[2].imshow(color[..., [2, 1, 0]].cpu().numpy())
     plt.show()
