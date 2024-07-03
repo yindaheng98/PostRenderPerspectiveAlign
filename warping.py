@@ -58,18 +58,20 @@ def projection(K, R, t, height, width, xyz):
     return uv
 
 
+# warp a reference image to local rendered image
 with torch.device("cuda"):
-    idx_src = "output/coffee_martini/frame1/train_interp/ours_30000/renders/00001"
-    idx_dst = "output/coffee_martini/frame1/train_interp/ours_30000/renders/00000"
-    K, R, t, height, width, depth = read_camera_depth(idx_src)
-    xyz = to_pcd(K, R, t, height, width, depth)
-    K_r, R_r, t_r, height_r, width_r = read_camera(idx_dst)
-    uv = projection(K_r, R_r, t_r, height_r, width_r, xyz)
+    idx_loc = "output/coffee_martini/frame1/train_interp/ours_30000/renders/00001"  # local rendered image
+    idx_ref = "output/coffee_martini/frame1/train_interp/ours_30000/renders/00000"  # reference image
+    K, R, t, height, width, depth = read_camera_depth(idx_loc)
+    xyz = to_pcd(K, R, t, height, width, depth)  # pos in 3D space <---> pixel on local rendered image
+    K_r, R_r, t_r, height_r, width_r = read_camera(idx_ref)
+    uv = projection(K_r, R_r, t_r, height_r, width_r, xyz)  # pixel on reference <---> pixel on local rendered
     grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
-    color = torch.tensor(read_color(idx_src))
-    warped = F.grid_sample(color.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
+    color = torch.tensor(read_color(idx_loc))  # local rendered image
+    color_ref = torch.tensor(read_color(idx_ref))  # reference image
+    warped = F.grid_sample(color_ref.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
                            mode='bilinear', align_corners=True)[0, ...].type(torch.uint8)
-    
+
     import open3d as o3d
     pcd = o3d.geometry.PointCloud()
     idx = torch.abs(xyz).sum(axis=-1) < 1000
@@ -80,10 +82,10 @@ with torch.device("cuda"):
     import matplotlib.pyplot as plt
     fig = plt.figure(figsize=(18, 6))
     axs = fig.subplots(ncols=3)
-    axs[0].set_title('target')
-    axs[0].imshow(read_color(idx_dst)[..., [2, 1, 0]].cpu().numpy())
-    axs[1].set_title('warped')
+    axs[0].set_title('ground truth')
+    axs[0].imshow(color[..., [2, 1, 0]].cpu().numpy())
+    axs[1].set_title('warped image')
     axs[1].imshow(warped.permute(1, 2, 0)[..., [2, 1, 0]].cpu().numpy())
-    axs[2].set_title('raw')
-    axs[2].imshow(color[..., [2, 1, 0]].cpu().numpy())
+    axs[2].set_title('reference image')
+    axs[2].imshow(color_ref[..., [2, 1, 0]].cpu().numpy())
     plt.show()
