@@ -83,8 +83,8 @@ def warp(uv, color_ref, width, height):
     uv_idx[..., 0].clamp_(0, width-1)
     mask = is_occlusion(uv_idx, width, height)
     warped = torch.zeros_like(color_ref)
-    # warped[uv_idx[..., 1].clamp(0, height-1), uv_idx[..., 0].clamp(0, width-1), ...] = color_ref  # inverse
-    warped = color_ref[uv_idx[..., 1].clamp(0, height-1), uv_idx[..., 0].clamp(0, width-1), ...]
+    # warped[uv_idx[..., 1], uv_idx[..., 0], ...] = color_ref  # inverse
+    warped = color_ref[uv_idx[..., 1], uv_idx[..., 0], ...]
     warped[mask, :] = 255
     return warped
 
