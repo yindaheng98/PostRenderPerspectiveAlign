@@ -65,15 +65,21 @@ def render(uv, color_ref, width, height):
     return warped.permute(1, 2, 0)
 
 
-def warp(uv, color_ref, width, height):
-    uv_idx = uv[..., :2].round().type(torch.int64)
-    index = uv_idx[..., 1].clamp(0, height-1) * width + uv_idx[..., 0].clamp(0, width-1)
-    index = index.reshape(-1)
+def count(uv, width, height):
+    index = (uv[..., 1] * width + uv[..., 0]).reshape(-1)
     src = torch.ones_like(index)
     counts = torch.zeros(height*width, dtype=src.dtype).scatter_add_(0, index, src)
+    return counts.reshape(height, width)
+
+
+def warp(uv, color_ref, width, height):
+    uv_idx = uv[..., :2].round().type(torch.int64)
+    uv_idx[..., 1].clamp_(0, height-1)
+    uv_idx[..., 0].clamp_(0, width-1)
+    counts = count(uv_idx, width, height)
     mask = counts.reshape(height, width) > 1
     warped = torch.zeros_like(color_ref)
-    warped[uv_idx[..., 1].clamp(0, height-1), uv_idx[..., 0].clamp(0, width-1), ...] = color_ref # inverse
+    warped[uv_idx[..., 1].clamp(0, height-1), uv_idx[..., 0].clamp(0, width-1), ...] = color_ref  # inverse
     # warped = color_ref[uv_idx[..., 1].clamp(0, height-1), uv_idx[..., 0].clamp(0, width-1), ...]
     warped[mask, :] = 255
     return warped
