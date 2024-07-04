@@ -60,7 +60,7 @@ def projection(K, R_c2w, T_c2w, height, width, xyz):
     return uv
 
 
-def render(uv, color_ref, width, height):
+def render(uv, color_ref, height, width):
     """Warp (have warping error)"""
     grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
     warped = F.grid_sample(color_ref.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
@@ -68,7 +68,7 @@ def render(uv, color_ref, width, height):
     return warped.permute(1, 2, 0)
 
 
-def count(uv, width, height):
+def count(uv, height, width):
     """Count on each pixel: how many point projected to this pixel?"""
     index = (uv[..., 1] * width + uv[..., 0]).reshape(-1)
     src = torch.ones_like(index)
@@ -76,19 +76,19 @@ def count(uv, width, height):
     return counts.reshape(height, width)
 
 
-def is_occlusion(uv, width, height):
+def is_occlusion(uv, height, width):
     """Detect whether the pixel is occluded by others when project to another camera"""
-    counts = count(uv, width, height)
+    counts = count(uv, height, width)
     counts_back = counts[uv[..., 1], uv[..., 0]]
     mask = counts_back > 1
     return mask  # TODO: 重合点中深度较低或与深度较低的点深度相差不大的点不算在重合点中
 
 
-def warp(uv, color_ref, width, height):
+def warp(uv, color_ref, height, width):
     uv_idx = uv[..., :2].round().type(torch.int64)
     uv_idx[..., 1].clamp_(0, height-1)
     uv_idx[..., 0].clamp_(0, width-1)
-    mask = is_occlusion(uv_idx, width, height)
+    mask = is_occlusion(uv_idx, height, width)
     warped = torch.zeros_like(color_ref)
     # warped[uv_idx[..., 1], uv_idx[..., 0], ...] = color_ref  # inverse
     warped = color_ref[uv_idx[..., 1], uv_idx[..., 0], ...]
@@ -107,8 +107,8 @@ with torch.device("cuda"):
     grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
     color = torch.tensor(read_color(idx_loc))  # local rendered image
     color_ref = torch.tensor(read_color(idx_ref))  # reference image
-    warped = warp(uv, color_ref, width, height)  # wrap it
-    rendered = render(uv, color_ref, width, height)  # wrap it
+    warped = warp(uv, color_ref, height, width)  # wrap it
+    rendered = render(uv, color_ref, height, width)  # wrap it
     # cv2.imwrite("warped.png", warped.cpu().numpy())
     # cv2.imwrite("rendered.png", rendered.cpu().numpy())
 
