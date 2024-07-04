@@ -41,6 +41,7 @@ def read_camera_rgbd(idx):
 
 
 def to_pcd(K, R_c2w, T_c2w, height, width, depth):
+    """Reconstruct point cloud from camera and depth map"""
     uv = torch.ones((height, width, 3), dtype=torch.float32)
     uv[..., 0] = torch.arange(0, width, dtype=torch.float32).unsqueeze(0).expand(height, -1)
     uv[..., 1] = torch.arange(0, height, dtype=torch.float32).unsqueeze(1).expand(-1, width)
@@ -51,6 +52,7 @@ def to_pcd(K, R_c2w, T_c2w, height, width, depth):
 
 
 def projection(K, R_c2w, T_c2w, height, width, xyz):
+    """Project point cloud to camera"""
     xyz_world = xyz.reshape(-1, 3).T
     xyz_camera = torch.inverse(R_c2w) @ (xyz_world - T_c2w.unsqueeze(1))
     uvz = K @ xyz_camera
@@ -59,6 +61,7 @@ def projection(K, R_c2w, T_c2w, height, width, xyz):
 
 
 def render(uv, color_ref, width, height):
+    """Warp (have warping error)"""
     grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
     warped = F.grid_sample(color_ref.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
                            mode='bilinear', align_corners=True)[0, ...].type(torch.uint8)
@@ -66,16 +69,20 @@ def render(uv, color_ref, width, height):
 
 
 def count(uv, width, height):
+    """Count on each pixel: how many point projected to this pixel?"""
     index = (uv[..., 1] * width + uv[..., 0]).reshape(-1)
     src = torch.ones_like(index)
     counts = torch.zeros(height*width, dtype=src.dtype).scatter_add_(0, index, src)
     return counts.reshape(height, width)
 
+
 def is_occlusion(uv, width, height):
+    """Detect whether the pixel is occluded by others when project to another camera"""
     counts = count(uv, width, height)
     counts_back = counts[uv[..., 1], uv[..., 0]]
     mask = counts_back > 1
-    return mask
+    return mask  # TODO: 重合点中深度最低的点不算在重合点中
+
 
 def warp(uv, color_ref, width, height):
     uv_idx = uv[..., :2].round().type(torch.int64)
