@@ -81,7 +81,7 @@ def is_occlusion(uv, width, height):
     counts = count(uv, width, height)
     counts_back = counts[uv[..., 1], uv[..., 0]]
     mask = counts_back > 1
-    return mask  # TODO: 重合点中深度最低的点不算在重合点中
+    return mask  # TODO: 重合点中深度较低或与深度较低的点深度相差不大的点不算在重合点中
 
 
 def warp(uv, color_ref, width, height):
@@ -109,6 +109,8 @@ with torch.device("cuda"):
     color_ref = torch.tensor(read_color(idx_ref))  # reference image
     warped = warp(uv, color_ref, width, height)  # wrap it
     rendered = render(uv, color_ref, width, height)  # wrap it
+    # cv2.imwrite("warped.png", warped.cpu().numpy())
+    # cv2.imwrite("rendered.png", rendered.cpu().numpy())
 
     import open3d as o3d
     pcd = o3d.geometry.PointCloud()
