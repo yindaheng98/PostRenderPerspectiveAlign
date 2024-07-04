@@ -58,11 +58,17 @@ def projection(K, R, t, height, width, xyz):
     return uv
 
 
+def render(uv, color_ref, width, height):
+    uv_idx = uv[..., :2].round().type(torch.int)
+    warped = color_ref[uv_idx[..., 1].clamp(0, height-1), uv_idx[..., 0].clamp(0, width-1), ...]
+    return warped
+
+
 def warp(uv, color_ref, width, height):
     grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
     warped = F.grid_sample(color_ref.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
                            mode='bilinear', align_corners=True)[0, ...].type(torch.uint8)
-    return warped
+    return warped.permute(1, 2, 0)
 
 
 # warp a reference image to local rendered image
@@ -77,6 +83,7 @@ with torch.device("cuda"):
     color = torch.tensor(read_color(idx_loc))  # local rendered image
     color_ref = torch.tensor(read_color(idx_ref))  # reference image
     warped = warp(uv, color_ref, width, height)  # wrap it
+    rendered = render(uv, color_ref, width, height)  # wrap it
 
     import open3d as o3d
     pcd = o3d.geometry.PointCloud()
@@ -86,12 +93,14 @@ with torch.device("cuda"):
     o3d.visualization.draw_geometries([pcd])
 
     import matplotlib.pyplot as plt
-    fig = plt.figure(figsize=(18, 6))
-    axs = fig.subplots(ncols=3)
+    fig = plt.figure(figsize=(24, 5))
+    axs = fig.subplots(ncols=4)
     axs[0].set_title('ground truth')
     axs[0].imshow(color[..., [2, 1, 0]].cpu().numpy())
     axs[1].set_title('warped image')
-    axs[1].imshow(warped.permute(1, 2, 0)[..., [2, 1, 0]].cpu().numpy())
-    axs[2].set_title('reference image')
-    axs[2].imshow(color_ref[..., [2, 1, 0]].cpu().numpy())
+    axs[1].imshow(warped[..., [2, 1, 0]].cpu().numpy())
+    axs[2].set_title('rendered image')
+    axs[2].imshow(rendered[..., [2, 1, 0]].cpu().numpy())
+    axs[3].set_title('reference image')
+    axs[3].imshow(color_ref[..., [2, 1, 0]].cpu().numpy())
     plt.show()
