@@ -59,18 +59,18 @@ def projection(K, R_c2w, T_c2w, height, width, xyz):
 
 
 def render(uv, color_ref, width, height):
+    grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
+    warped = F.grid_sample(color_ref.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
+                           mode='bilinear', align_corners=True)[0, ...].type(torch.uint8)
+    return warped.permute(1, 2, 0)
+
+
+def warp(uv, color_ref, width, height):
     uv_idx = uv[..., :2].round().type(torch.int)
     # warped = torch.zeros_like(color_ref)
     # warped[uv_idx[..., 1].clamp(0, height-1), uv_idx[..., 0].clamp(0, width-1), ...] = color_ref # inverse
     warped = color_ref[uv_idx[..., 1].clamp(0, height-1), uv_idx[..., 0].clamp(0, width-1), ...]
     return warped
-
-
-def warp(uv, color_ref, width, height):
-    grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
-    warped = F.grid_sample(color_ref.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
-                           mode='bilinear', align_corners=True)[0, ...].type(torch.uint8)
-    return warped.permute(1, 2, 0)
 
 
 # warp a reference image to local rendered image
