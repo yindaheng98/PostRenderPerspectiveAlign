@@ -69,11 +69,13 @@ def render(uv, color_ref, height, width):
 
 
 def count(uv, height, width):
-    """Count on each pixel: how many point projected to this pixel?"""
+    """Count on each pixel on reference image: how many point projected to this pixel?"""
     index = (uv[..., 1] * width + uv[..., 0]).reshape(-1)
     src = torch.ones_like(index)
     counts = torch.zeros(height*width, dtype=src.dtype).scatter_add_(0, index, src)
-    return counts.reshape(height, width)
+    # 输出值：对于local rendered image上的每个点，在投影到reference image上后，有多少个点和它重合？
+    counts_back = counts.reshape(height, width)[uv[..., 1], uv[..., 0]]
+    return counts_back
 
 
 def get_min_depth(uv, depth, height, width):
@@ -81,7 +83,9 @@ def get_min_depth(uv, depth, height, width):
     index = (uv[..., 1] * width + uv[..., 0]).reshape(-1)
     src = depth.reshape(-1)
     min_depth = torch.zeros(height*width, dtype=depth.dtype).index_reduce_(0, index, src, 'amin', include_self=False)
-    return min_depth.reshape(height, width)
+    # 输出值：对于local rendered image上的每个点，在投影到reference image上后，所有和它重合的点的深度的最小值是多少？
+    min_depth_back = min_depth.reshape(height, width)[uv[..., 1], uv[..., 0]]
+    return min_depth_back
 
 
 depth_diff_thr_for_occlusion = 1.
@@ -90,9 +94,7 @@ depth_diff_thr_for_occlusion = 1.
 def is_occlusion(uv, depth, height, width):
     """Detect whether the pixel is occluded by others when project to another camera"""
     # 全部的重合点
-    counts = count(uv, height, width)
-    counts_back = counts[uv[..., 1], uv[..., 0]]
-    mask = counts_back > 1
+    mask = count(uv, height, width) > 1
     # 图像边缘的点不算在重合点中
     uv_tmp = uv[mask, ...]
     mask_tmp = mask[mask]
@@ -101,7 +103,7 @@ def is_occlusion(uv, depth, height, width):
     mask[mask.clone()] = mask_tmp
     # 重合点中与深度最低的点深度相差不大的点不算在重合点中
     min_depth = get_min_depth(uv, depth, height, width)
-    depthdiff = depth[mask] - min_depth[mask]
+    depthdiff = torch.abs(depth[mask] - min_depth[mask])
     mask_tmp = mask[mask]
     mask_tmp[depthdiff < depth_diff_thr_for_occlusion] = False
     mask[mask.clone()] = mask_tmp
