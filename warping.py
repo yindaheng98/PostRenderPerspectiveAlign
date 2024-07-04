@@ -57,7 +57,7 @@ def projection(K, R_c2w, T_c2w, height, width, xyz):
     xyz_camera = torch.inverse(R_c2w) @ (xyz_world - T_c2w.unsqueeze(1))
     uvz = K @ xyz_camera
     uv = (uvz/uvz[-1, ...]).T.reshape(height, width, 3)
-    return uv
+    return uv, uvz[-1, ...].reshape(height, width)
 
 
 def render(uv, color_ref, height, width):
@@ -76,19 +76,43 @@ def count(uv, height, width):
     return counts.reshape(height, width)
 
 
-def is_occlusion(uv, height, width):
+def get_min_depth(uv, depth, height, width):
+    """Count on each pixel: get min depth among all point projected to this pixel"""
+    index = (uv[..., 1] * width + uv[..., 0]).reshape(-1)
+    src = depth.reshape(-1)
+    min_depth = torch.zeros(height*width, dtype=depth.dtype).index_reduce_(0, index, src, 'amin', include_self=False)
+    return min_depth.reshape(height, width)
+
+
+depth_diff_thr_for_occlusion = 1.
+
+
+def is_occlusion(uv, depth, height, width):
     """Detect whether the pixel is occluded by others when project to another camera"""
+    # 全部的重合点
     counts = count(uv, height, width)
     counts_back = counts[uv[..., 1], uv[..., 0]]
     mask = counts_back > 1
-    return mask  # TODO: 重合点中深度较低或与深度较低的点深度相差不大的点不算在重合点中
+    # 图像边缘的点不算在重合点中
+    uv_tmp = uv[mask, ...]
+    mask_tmp = mask[mask]
+    mask_tmp[torch.logical_or(uv_tmp[..., 0] <= 0, uv_tmp[..., 0] >= width-1)] = False
+    mask_tmp[torch.logical_or(uv_tmp[..., 1] <= 0, uv_tmp[..., 1] >= height-1)] = False
+    mask[mask.clone()] = mask_tmp
+    # 重合点中与深度最低的点深度相差不大的点不算在重合点中
+    min_depth = get_min_depth(uv, depth, height, width)
+    depthdiff = depth[mask] - min_depth[mask]
+    mask_tmp = mask[mask]
+    mask_tmp[depthdiff < depth_diff_thr_for_occlusion] = False
+    mask[mask.clone()] = mask_tmp
+    return mask
 
 
-def warp(uv, color_ref, height, width):
+def warp(uv, color_ref, depth, height, width):
     uv_idx = uv[..., :2].round().type(torch.int64)
     uv_idx[..., 1].clamp_(0, height-1)
     uv_idx[..., 0].clamp_(0, width-1)
-    mask = is_occlusion(uv_idx, height, width)
+    mask = is_occlusion(uv_idx, depth, height, width)
     warped = torch.zeros_like(color_ref)
     # warped[uv_idx[..., 1], uv_idx[..., 0], ...] = color_ref  # inverse
     warped = color_ref[uv_idx[..., 1], uv_idx[..., 0], ...]
@@ -103,11 +127,11 @@ with torch.device("cuda"):
     K, R_c2w, T_c2w, height, width, depth = read_camera_depth(idx_loc)
     xyz = to_pcd(K, R_c2w, T_c2w, height, width, depth)  # xyz[uv on local rendered image] = pos in 3D space
     K_r, R_r, t_r, height_r, width_r = read_camera(idx_ref)
-    uv = projection(K_r, R_r, t_r, height_r, width_r, xyz)  # uv[uv on local rendered image] = uv on reference
+    uv, z = projection(K_r, R_r, t_r, height_r, width_r, xyz)  # uv[uv on local rendered image] = uv on reference
     grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
     color = torch.tensor(read_color(idx_loc))  # local rendered image
     color_ref = torch.tensor(read_color(idx_ref))  # reference image
-    warped = warp(uv, color_ref, height, width)  # wrap it
+    warped = warp(uv, color_ref, z, height, width)  # wrap it
     rendered = render(uv, color_ref, height, width)  # wrap it
     # cv2.imwrite("warped.png", warped.cpu().numpy())
     # cv2.imwrite("rendered.png", rendered.cpu().numpy())
