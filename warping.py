@@ -67,9 +67,9 @@ def render(uv, color_ref, width, height):
 
 def warp(uv, color_ref, width, height):
     uv_idx = uv[..., :2].round().type(torch.int)
-    # warped = torch.zeros_like(color_ref)
-    # warped[uv_idx[..., 1].clamp(0, height-1), uv_idx[..., 0].clamp(0, width-1), ...] = color_ref # inverse
-    warped = color_ref[uv_idx[..., 1].clamp(0, height-1), uv_idx[..., 0].clamp(0, width-1), ...]
+    warped = torch.zeros_like(color_ref)
+    warped[uv_idx[..., 1].clamp(0, height-1), uv_idx[..., 0].clamp(0, width-1), ...] = color_ref # inverse
+    # warped = color_ref[uv_idx[..., 1].clamp(0, height-1), uv_idx[..., 0].clamp(0, width-1), ...]
     return warped
 
 
@@ -84,7 +84,7 @@ with torch.device("cuda"):
     grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
     color = torch.tensor(read_color(idx_loc))  # local rendered image
     color_ref = torch.tensor(read_color(idx_ref))  # reference image
-    warped = warp(uv, color_ref, width, height)  # wrap it
+    warped = warp(uv, color, width, height)  # wrap it
     rendered = render(uv, color_ref, width, height)  # wrap it
 
     import open3d as o3d
