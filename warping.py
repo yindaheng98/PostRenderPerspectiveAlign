@@ -60,7 +60,8 @@ def projection(K, R, t, height, width, xyz):
 
 def render(uv, color_ref, width, height):
     uv_idx = uv[..., :2].round().type(torch.int)
-    warped = color_ref[uv_idx[..., 1].clamp(0, height-1), uv_idx[..., 0].clamp(0, width-1), ...]
+    warped = torch.zeros_like(color_ref)
+    warped[uv_idx[..., 1].clamp(0, height-1), uv_idx[..., 0].clamp(0, width-1), ...] = color_ref
     return warped
 
 
@@ -73,8 +74,8 @@ def warp(uv, color_ref, width, height):
 
 # warp a reference image to local rendered image
 with torch.device("cuda"):
-    idx_loc = "output/coffee_martini/frame1/train_interp/ours_30000/renders/00001"  # local rendered image
-    idx_ref = "output/coffee_martini/frame1/train_interp/ours_30000/renders/00000"  # reference image
+    idx_loc = "output/coffee_martini/frame1-SH1/train_interp/ours_30000/renders/00001"  # local rendered image
+    idx_ref = "output/coffee_martini/frame1-SH1/train_interp/ours_30000/renders/00000"  # reference image
     K, R, t, height, width, depth = read_camera_depth(idx_loc)
     xyz = to_pcd(K, R, t, height, width, depth)  # xyz[uv on local rendered image] = pos in 3D space
     K_r, R_r, t_r, height_r, width_r = read_camera(idx_ref)
@@ -82,8 +83,8 @@ with torch.device("cuda"):
     grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
     color = torch.tensor(read_color(idx_loc))  # local rendered image
     color_ref = torch.tensor(read_color(idx_ref))  # reference image
-    warped = warp(uv, color_ref, width, height)  # wrap it
-    rendered = render(uv, color_ref, width, height)  # wrap it
+    warped = warp(uv, color, width, height)  # wrap it
+    rendered = render(uv, color, width, height)  # wrap it
 
     import open3d as o3d
     pcd = o3d.geometry.PointCloud()
@@ -93,14 +94,15 @@ with torch.device("cuda"):
     o3d.visualization.draw_geometries([pcd])
 
     import matplotlib.pyplot as plt
-    fig = plt.figure(figsize=(24, 5))
-    axs = fig.subplots(ncols=4)
-    axs[0].set_title('ground truth')
-    axs[0].imshow(color[..., [2, 1, 0]].cpu().numpy())
-    axs[1].set_title('warped image')
-    axs[1].imshow(warped[..., [2, 1, 0]].cpu().numpy())
-    axs[2].set_title('rendered image')
-    axs[2].imshow(rendered[..., [2, 1, 0]].cpu().numpy())
-    axs[3].set_title('reference image')
-    axs[3].imshow(color_ref[..., [2, 1, 0]].cpu().numpy())
+    fig = plt.figure(figsize=(16, 12))
+    axs = fig.subplots(ncols=2, nrows=2)
+    axs[0, 0].set_title('local rendered image')
+    axs[0, 0].imshow(color[..., [2, 1, 0]].cpu().numpy())
+    axs[0, 1].set_title('reference image')
+    axs[0, 1].imshow(color_ref[..., [2, 1, 0]].cpu().numpy())
+    axs[1, 0].set_title('warped image')
+    axs[1, 0].imshow(warped[..., [2, 1, 0]].cpu().numpy())
+    axs[1, 1].set_title('reconstructed point cloud')
+    axs[1, 1].imshow(rendered[..., [2, 1, 0]].cpu().numpy())
+    fig.tight_layout(pad=5)
     plt.show()
