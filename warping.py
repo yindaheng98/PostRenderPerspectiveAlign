@@ -71,16 +71,20 @@ def count(uv, width, height):
     counts = torch.zeros(height*width, dtype=src.dtype).scatter_add_(0, index, src)
     return counts.reshape(height, width)
 
+def is_occlusion(uv, width, height):
+    counts = count(uv, width, height)
+    counts_back = counts[uv[..., 1], uv[..., 0]]
+    mask = counts_back > 1
+    return mask
 
 def warp(uv, color_ref, width, height):
     uv_idx = uv[..., :2].round().type(torch.int64)
     uv_idx[..., 1].clamp_(0, height-1)
     uv_idx[..., 0].clamp_(0, width-1)
-    counts = count(uv_idx, width, height)
-    mask = counts.reshape(height, width) > 1
+    mask = is_occlusion(uv_idx, width, height)
     warped = torch.zeros_like(color_ref)
-    warped[uv_idx[..., 1].clamp(0, height-1), uv_idx[..., 0].clamp(0, width-1), ...] = color_ref  # inverse
-    # warped = color_ref[uv_idx[..., 1].clamp(0, height-1), uv_idx[..., 0].clamp(0, width-1), ...]
+    # warped[uv_idx[..., 1].clamp(0, height-1), uv_idx[..., 0].clamp(0, width-1), ...] = color_ref  # inverse
+    warped = color_ref[uv_idx[..., 1].clamp(0, height-1), uv_idx[..., 0].clamp(0, width-1), ...]
     warped[mask, :] = 255
     return warped
 
@@ -96,7 +100,7 @@ with torch.device("cuda"):
     grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
     color = torch.tensor(read_color(idx_loc))  # local rendered image
     color_ref = torch.tensor(read_color(idx_ref))  # reference image
-    warped = warp(uv, color, width, height)  # wrap it
+    warped = warp(uv, color_ref, width, height)  # wrap it
     rendered = render(uv, color_ref, width, height)  # wrap it
 
     import open3d as o3d
