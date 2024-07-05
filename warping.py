@@ -121,10 +121,15 @@ def is_occlusion(uv, depth, height, width):
     mask_occluded[mask_overlap] = mask_tmp
 
     # 哪些点遮挡了其他点
-    mask_tmp = mask_overlap[mask_overlap]
-    mask_tmp[depthdiff >= depth_diff_thr_for_occlusion] = False
-    mask_occlude = mask_overlap.clone()
-    mask_occlude[mask_overlap] = mask_tmp
+    occluded_pos_on_ref = uv[mask_occluded, ...]  # 所有在local rendered image上判定为被遮挡的点在reference image上的位置
+    occluded_mask_on_ref = torch.zeros(size=(height, width), dtype=torch.uint8)
+    occluded_mask_on_ref[occluded_pos_on_ref[..., 1], occluded_pos_on_ref[..., 0]] = 1  # 在reference image上标记上述位置
+    mask_occlude = occluded_mask_on_ref[uv[..., 1], uv[..., 0]]  # 将在reference image上标记的位置再投影回local rendered image上
+    mask_occlude &= ~mask_occluded  # 不是被遮挡的点就是遮挡别人的点
+    # mask_tmp = mask_overlap[mask_overlap]
+    # mask_tmp[depthdiff >= depth_diff_thr_for_occlusion] = False
+    # mask_occlude = mask_overlap.clone()
+    # mask_occlude[mask_overlap] = mask_tmp
     return mask_occluded, mask_occlude
 
 
