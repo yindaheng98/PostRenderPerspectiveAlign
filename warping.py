@@ -93,38 +93,46 @@ depth_diff_thr_for_occlusion = 0.5
 
 def is_occlusion(uv, depth, height, width):
     """Detect whether the pixel is occluded by others when project to another camera"""
-    # 全部的重合点
-    mask = count(uv, height, width) > 1
+    # 与其他点有重合的点
+    mask_overlap = count(uv, height, width) > 1
     # 图像边缘的点不算在重合点中
-    uv_tmp = uv[mask, ...]
-    mask_tmp = mask[mask]
+    uv_tmp = uv[mask_overlap, ...]
+    mask_tmp = mask_overlap[mask_overlap]
     mask_tmp[torch.logical_or(uv_tmp[..., 0] <= 0, uv_tmp[..., 0] >= width-1)] = False
     mask_tmp[torch.logical_or(uv_tmp[..., 1] <= 0, uv_tmp[..., 1] >= height-1)] = False
-    mask[mask.clone()] = mask_tmp
+    mask_overlap[mask_overlap.clone()] = mask_tmp
     # 重合点中与深度最低的点深度相差不大的点不算在重合点中
     min_depth = get_min_depth(uv, depth, height, width)
-    depthdiff = torch.abs(depth[mask] - min_depth[mask])
+    depthdiff = torch.abs(depth[mask_overlap] - min_depth[mask_overlap])
     # import matplotlib.pyplot as plt
     # fig = plt.figure(figsize=(16, 12))
     # ax = fig.subplots()
     # counts, bins = np.histogram(depthdiff.clamp_max(1).cpu().numpy(), bins=100)
     # ax.hist(bins[:-1], bins, weights=counts)
     # plt.show()
-    mask_tmp = mask[mask]
+    # 哪些点被其他点遮挡了
+    mask_tmp = mask_overlap[mask_overlap]
     mask_tmp[depthdiff < depth_diff_thr_for_occlusion] = False
-    mask[mask.clone()] = mask_tmp
-    return mask
+    mask_occluded = mask_overlap.clone()
+    mask_occluded[mask_overlap] = mask_tmp
+    # 哪些点遮挡了其他点
+    mask_tmp = mask_overlap[mask_overlap]
+    mask_tmp[depthdiff >= depth_diff_thr_for_occlusion] = False
+    mask_occlude = mask_overlap.clone()
+    mask_occlude[mask_overlap] = mask_tmp
+    return mask_occluded, mask_occlude
 
 
 def warp(uv, color_ref, depth, height, width):
     uv_idx = uv[..., :2].round().type(torch.int64)
     uv_idx[..., 1].clamp_(0, height-1)
     uv_idx[..., 0].clamp_(0, width-1)
-    mask = is_occlusion(uv_idx, depth, height, width)
+    mask_occluded, mask_occlude = is_occlusion(uv_idx, depth, height, width)
     warped = torch.zeros_like(color_ref)
     # warped[uv_idx[..., 1], uv_idx[..., 0], ...] = color_ref  # inverse
     warped = color_ref[uv_idx[..., 1], uv_idx[..., 0], ...]
-    warped[mask, :] = 255
+    warped[mask_occluded, :] = torch.tensor([255, 0, 0], dtype=warped.dtype)
+    warped[mask_occlude, :] = torch.tensor([0, 255, 0], dtype=warped.dtype)
     return warped
 
 
