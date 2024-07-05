@@ -88,7 +88,7 @@ def get_min_depth(uv, depth, height, width):
     return min_depth_back
 
 
-depth_diff_thr_for_occlusion = 1.
+depth_diff_thr_for_occlusion = 0.5
 
 
 def is_occlusion(uv, depth, height, width):
@@ -104,6 +104,12 @@ def is_occlusion(uv, depth, height, width):
     # 重合点中与深度最低的点深度相差不大的点不算在重合点中
     min_depth = get_min_depth(uv, depth, height, width)
     depthdiff = torch.abs(depth[mask] - min_depth[mask])
+    # import matplotlib.pyplot as plt
+    # fig = plt.figure(figsize=(16, 12))
+    # ax = fig.subplots()
+    # counts, bins = np.histogram(depthdiff.clamp_max(1).cpu().numpy(), bins=100)
+    # ax.hist(bins[:-1], bins, weights=counts)
+    # plt.show()
     mask_tmp = mask[mask]
     mask_tmp[depthdiff < depth_diff_thr_for_occlusion] = False
     mask[mask.clone()] = mask_tmp
