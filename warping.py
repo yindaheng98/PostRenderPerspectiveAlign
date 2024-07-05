@@ -133,6 +133,15 @@ def is_occlusion(uv, depth, height, width):
     return mask_occluded, mask_occlude
 
 
+def error_erosion(warped, mask_occluded, mask_occlude):
+    edge = F.max_pool2d(
+        mask_occluded.type(torch.float32)[None, None, ...],
+        kernel_size=3, stride=1, padding=1
+    ).type(torch.bool)[0, 0, ...] & ~mask_occluded
+    edge_no_occlude = edge & ~mask_occlude
+    return edge_no_occlude
+
+
 def warp(uv, color_ref, depth, height, width):
     uv_idx = uv[..., :2].round().type(torch.int64)
     uv_idx[..., 1].clamp_(0, height-1)
@@ -141,8 +150,10 @@ def warp(uv, color_ref, depth, height, width):
     warped = torch.zeros_like(color_ref)
     # warped[uv_idx[..., 1], uv_idx[..., 0], ...] = color_ref  # inverse
     warped = color_ref[uv_idx[..., 1], uv_idx[..., 0], ...]
+    edge = error_erosion(warped, mask_occluded, mask_occlude)
     warped[mask_occluded, :] = torch.tensor([255, 0, 0], dtype=warped.dtype)
     warped[mask_occlude, :] = torch.tensor([0, 255, 0], dtype=warped.dtype)
+    warped[edge, :] = torch.tensor([0, 0, 255], dtype=warped.dtype)
     return warped
 
 
