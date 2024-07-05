@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import json
+from itertools import product
 import torch
 import torch.nn.functional as F
 
@@ -122,8 +123,8 @@ def is_occlusion(uv, depth, height, width):
 
     # 哪些点遮挡了其他点
     occluded_pos_on_ref = uv[mask_occluded, ...]  # 所有在local rendered image上判定为被遮挡的点在reference image上的位置
-    occluded_mask_on_ref = torch.zeros(size=(height, width), dtype=torch.uint8)
-    occluded_mask_on_ref[occluded_pos_on_ref[..., 1], occluded_pos_on_ref[..., 0]] = 1  # 在reference image上标记上述位置
+    occluded_mask_on_ref = torch.zeros(size=(height, width), dtype=torch.uint8).type(torch.bool)
+    occluded_mask_on_ref[occluded_pos_on_ref[..., 1], occluded_pos_on_ref[..., 0]] = True  # 在reference image上标记上述位置
     mask_occlude = occluded_mask_on_ref[uv[..., 1], uv[..., 0]]  # 将在reference image上标记的位置再投影回local rendered image上
     mask_occlude &= ~mask_occluded  # 不是被遮挡的点就是遮挡别人的点
     # mask_tmp = mask_overlap[mask_overlap]
@@ -133,13 +134,37 @@ def is_occlusion(uv, depth, height, width):
     return mask_occluded, mask_occlude
 
 
+error_erosion_kernel_size = 5
+error_erosion_kernel = list(product(
+    range(-error_erosion_kernel_size, error_erosion_kernel_size + 1),
+    range(-error_erosion_kernel_size, error_erosion_kernel_size + 1)
+))
+
+
 def error_erosion(warped, mask_occluded, mask_occlude):
+    assert mask_occluded.dim() == mask_occlude.dim() == 2
+    assert mask_occluded.shape == mask_occlude.shape
+    height, width = mask_occluded.shape
     edge = F.max_pool2d(
         mask_occluded.type(torch.float32)[None, None, ...],
         kernel_size=3, stride=1, padding=1
     ).type(torch.bool)[0, 0, ...] & ~mask_occluded
     edge_no_occlude = edge & ~mask_occlude
-    return edge_no_occlude
+    kernel = torch.tensor(error_erosion_kernel)
+    edge_pos = edge_no_occlude.nonzero()
+    kernels = edge_pos.unsqueeze(1) + kernel.unsqueeze(0)
+    kernels[..., 0].clamp_(0, height-1)
+    kernels[..., 1].clamp_(0, width-1)
+    colormask_in_kernels = ~mask_occlude[kernels[..., 0], kernels[..., 1]]  # donot use color in occlude region
+    colormask_in_kernels &= ~mask_occluded[kernels[..., 0], kernels[..., 1]]  # donot use color in occluded region
+    colors_in_kernels = warped[kernels[..., 0], kernels[..., 1]]
+    colors_in_kernels[colormask_in_kernels, ...] = 0
+    colors_in_kernels = colors_in_kernels.type(torch.float32)
+    validcount_in_kernels = colormask_in_kernels.sum(dim=1)
+    avg_color_of_kernels = (colors_in_kernels.sum(dim=1) / validcount_in_kernels.unsqueeze(-1)).type(torch.uint8)
+    warped[kernels[..., 0], kernels[..., 1], ...] = avg_color_of_kernels.unsqueeze(1).expand(-1, kernels.shape[1], -1)
+    mask_occluded[kernels[..., 0], kernels[..., 1]] = False
+    return warped, mask_occluded
 
 
 def warp(uv, color_ref, depth, height, width):
@@ -150,10 +175,10 @@ def warp(uv, color_ref, depth, height, width):
     warped = torch.zeros_like(color_ref)
     # warped[uv_idx[..., 1], uv_idx[..., 0], ...] = color_ref  # inverse
     warped = color_ref[uv_idx[..., 1], uv_idx[..., 0], ...]
-    edge = error_erosion(warped, mask_occluded, mask_occlude)
-    warped[mask_occluded, :] = torch.tensor([255, 0, 0], dtype=warped.dtype)
-    warped[mask_occlude, :] = torch.tensor([0, 255, 0], dtype=warped.dtype)
-    warped[edge, :] = torch.tensor([0, 0, 255], dtype=warped.dtype)
+    warped, mask_occluded = error_erosion(warped, mask_occluded, mask_occlude)
+    warped[mask_occluded, :] = torch.tensor([255, 0, 0], dtype=warped.dtype)  # debug
+    warped[mask_occlude, :] = torch.tensor([0, 255, 0], dtype=warped.dtype)  # debug
+    # warped[edge, :] = torch.tensor([0, 0, 255], dtype=warped.dtype)
     return warped
 
 
