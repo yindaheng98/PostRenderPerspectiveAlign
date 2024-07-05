@@ -73,9 +73,7 @@ def count(uv, height, width):
     index = (uv[..., 1] * width + uv[..., 0]).reshape(-1)
     src = torch.ones_like(index)
     counts = torch.zeros(height*width, dtype=src.dtype).scatter_add_(0, index, src)
-    # 输出值：对于local rendered image上的每个点，在投影到reference image上后，有多少个点和它重合？
-    counts_back = counts.reshape(height, width)[uv[..., 1], uv[..., 0]]
-    return counts_back
+    return counts
 
 
 def get_min_depth(uv, depth, height, width):
@@ -83,9 +81,7 @@ def get_min_depth(uv, depth, height, width):
     index = (uv[..., 1] * width + uv[..., 0]).reshape(-1)
     src = depth.reshape(-1)
     min_depth = torch.zeros(height*width, dtype=depth.dtype).index_reduce_(0, index, src, 'amin', include_self=False)
-    # 输出值：对于local rendered image上的每个点，在投影到reference image上后，所有和它重合的点的深度的最小值是多少？
-    min_depth_back = min_depth.reshape(height, width)[uv[..., 1], uv[..., 0]]
-    return min_depth_back
+    return min_depth
 
 
 depth_diff_thr_for_occlusion = 0.5
@@ -93,8 +89,13 @@ depth_diff_thr_for_occlusion = 0.5
 
 def is_occlusion(uv, depth, height, width):
     """Detect whether the pixel is occluded by others when project to another camera"""
+
     # 与其他点有重合的点
-    mask_overlap = count(uv, height, width) > 1
+    counts = count(uv, height, width)
+    # counts_back: 对于local rendered image上的每个点，在投影到reference image上后，有多少个点和它重合？
+    counts_back = counts.reshape(height, width)[uv[..., 1], uv[..., 0]]
+    mask_overlap = counts_back > 1
+
     # 图像边缘的点不算在重合点中
     uv_tmp = uv[mask_overlap, ...]
     mask_tmp = mask_overlap[mask_overlap]
@@ -103,18 +104,22 @@ def is_occlusion(uv, depth, height, width):
     mask_overlap[mask_overlap.clone()] = mask_tmp
     # 重合点中与深度最低的点深度相差不大的点不算在重合点中
     min_depth = get_min_depth(uv, depth, height, width)
-    depthdiff = torch.abs(depth[mask_overlap] - min_depth[mask_overlap])
+    # min_depth_back: 对于local rendered image上的每个点，在投影到reference image上后，所有和它重合的点的深度的最小值是多少？
+    min_depth_back = min_depth.reshape(height, width)[uv[..., 1], uv[..., 0]]
+    depthdiff = torch.abs(depth[mask_overlap] - min_depth_back[mask_overlap])
     # import matplotlib.pyplot as plt
     # fig = plt.figure(figsize=(16, 12))
     # ax = fig.subplots()
     # counts, bins = np.histogram(depthdiff.clamp_max(1).cpu().numpy(), bins=100)
     # ax.hist(bins[:-1], bins, weights=counts)
     # plt.show()
+
     # 哪些点被其他点遮挡了
     mask_tmp = mask_overlap[mask_overlap]
     mask_tmp[depthdiff < depth_diff_thr_for_occlusion] = False
     mask_occluded = mask_overlap.clone()
     mask_occluded[mask_overlap] = mask_tmp
+
     # 哪些点遮挡了其他点
     mask_tmp = mask_overlap[mask_overlap]
     mask_tmp[depthdiff >= depth_diff_thr_for_occlusion] = False
