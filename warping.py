@@ -73,7 +73,7 @@ def count(uv, height, width):
     index = (uv[..., 1] * width + uv[..., 0]).reshape(-1)
     src = torch.ones_like(index)
     counts = torch.zeros(height*width, dtype=src.dtype).scatter_add_(0, index, src)
-    return counts
+    return counts.reshape(height, width)
 
 
 def get_min_depth(uv, depth, height, width):
@@ -81,7 +81,7 @@ def get_min_depth(uv, depth, height, width):
     index = (uv[..., 1] * width + uv[..., 0]).reshape(-1)
     src = depth.reshape(-1)
     min_depth = torch.zeros(height*width, dtype=depth.dtype).index_reduce_(0, index, src, 'amin', include_self=False)
-    return min_depth
+    return min_depth.reshape(height, width)
 
 
 depth_diff_thr_for_occlusion = 0.5
@@ -93,7 +93,7 @@ def is_occlusion(uv, depth, height, width):
     # 与其他点有重合的点
     counts = count(uv, height, width)
     # counts_back: 对于local rendered image上的每个点，在投影到reference image上后，有多少个点和它重合？
-    counts_back = counts.reshape(height, width)[uv[..., 1], uv[..., 0]]
+    counts_back = counts[uv[..., 1], uv[..., 0]]
     mask_overlap = counts_back > 1
 
     # 图像边缘的点不算在重合点中
@@ -105,7 +105,7 @@ def is_occlusion(uv, depth, height, width):
     # 重合点中与深度最低的点深度相差不大的点不算在重合点中
     min_depth = get_min_depth(uv, depth, height, width)
     # min_depth_back: 对于local rendered image上的每个点，在投影到reference image上后，所有和它重合的点的深度的最小值是多少？
-    min_depth_back = min_depth.reshape(height, width)[uv[..., 1], uv[..., 0]]
+    min_depth_back = min_depth[uv[..., 1], uv[..., 0]]
     depthdiff = torch.abs(depth[mask_overlap] - min_depth_back[mask_overlap])
     # import matplotlib.pyplot as plt
     # fig = plt.figure(figsize=(16, 12))
