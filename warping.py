@@ -4,6 +4,7 @@ import json
 from itertools import product
 import torch
 import torch.nn.functional as F
+import time
 
 
 def read_camera(idx):
@@ -178,8 +179,12 @@ def error_erosion(warped, mask_occluded, mask_occlude):
     # return warped, mask_occluded  # debug
 
     # where to collect color for avg
+    mask_occluded_dilated = F.max_pool2d(  # dilation the occluded region
+        mask_occluded.type(torch.float32)[None, None, ...],
+        kernel_size=mask_occlude_dilation_kernel_size, stride=1, padding=mask_occlude_dilation_padding
+    ).type(torch.bool)[0, 0, ...]
     kernel_avgcolormask = ~mask_occlude[kernels[..., 0], kernels[..., 1]]  # donot use color in occlude region
-    kernel_avgcolormask &= ~mask_occluded[kernels[..., 0], kernels[..., 1]]  # donot use color in occluded region
+    kernel_avgcolormask &= ~mask_occluded_dilated[kernels[..., 0], kernels[..., 1]]  # donot use color in occluded region
     # avgcolor_pos = kernels[kernel_avgcolormask, ...]
     # warped[avgcolor_pos[..., 0], avgcolor_pos[..., 1], ...] = torch.tensor([0, 255, 0], dtype=torch.uint8)  # debug
     # return warped, mask_occluded  # debug
@@ -191,11 +196,11 @@ def error_erosion(warped, mask_occluded, mask_occlude):
     # warped[kernels[..., 0], kernels[..., 1], ...] = torch.tensor([0, 0, 255], dtype=torch.uint8)  # debug
     # return warped, mask_occluded  # debug
     kernel_assignmask = kernel_assignmask[kernel_valid, ...]
-    # assign_pos = kernels[kernel_assignmask, ...]
+    # assign_pos = kernels[kernel_assignmask, ...]  # debug
     # warped[assign_pos[..., 0], assign_pos[..., 1], ...] = torch.tensor([0, 0, 255], dtype=torch.uint8)  # debug
     # return warped, mask_occluded  # debug
     kernel_avgcolormask = kernel_avgcolormask[kernel_valid, ...]
-    # avgcolor_pos = kernels[kernel_avgcolormask, ...]
+    # avgcolor_pos = kernels[kernel_avgcolormask, ...]  # debug
     # warped[avgcolor_pos[..., 0], avgcolor_pos[..., 1], ...] = torch.tensor([0, 255, 0], dtype=torch.uint8)  # debug
     # return warped, mask_occluded  # debug
     kernel_validcolorcount = kernel_validcolorcount[kernel_valid]
@@ -243,7 +248,11 @@ with torch.device("cuda"):
     grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
     color = torch.tensor(read_color(idx_loc))  # local rendered image
     color_ref = torch.tensor(read_color(idx_ref))  # reference image
+    st = time.time()
     warped = warp(uv, color_ref, z, height, width)  # wrap it
+    torch.cuda.synchronize(torch.device("cuda"))
+    et = time.time()
+    print(et - st)
     rendered = render(uv, color_ref, height, width)  # wrap it
     # cv2.imwrite("warped.png", warped.cpu().numpy())
     # cv2.imwrite("rendered.png", rendered.cpu().numpy())
