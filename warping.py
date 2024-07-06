@@ -157,11 +157,11 @@ def error_erosion(warped, mask_occluded, mask_occlude):
     kernels[..., 1].clamp_(0, width-1)
     colormask_in_kernels = ~mask_occlude[kernels[..., 0], kernels[..., 1]]  # donot use color in occlude region
     colormask_in_kernels &= ~mask_occluded[kernels[..., 0], kernels[..., 1]]  # donot use color in occluded region
-    colors_in_kernels = warped[kernels[..., 0], kernels[..., 1]]
-    colors_in_kernels[colormask_in_kernels, ...] = 0
-    colors_in_kernels = colors_in_kernels.type(torch.float32)
+    colors_in_kernels = warped[kernels[..., 0], kernels[..., 1]].type(torch.float32)
+    colors_in_kernels[colormask_in_kernels, ...] = 0.
     validcount_in_kernels = colormask_in_kernels.sum(dim=1)
     avg_color_of_kernels = (colors_in_kernels.sum(dim=1) / validcount_in_kernels.unsqueeze(-1)).type(torch.uint8)
+    # TODO: 此处赋值存在冲突，需要用index_reduce_
     warped[kernels[..., 0], kernels[..., 1], ...] = avg_color_of_kernels.unsqueeze(1).expand(-1, kernels.shape[1], -1)
     mask_occluded[kernels[..., 0], kernels[..., 1]] = False
     return warped, mask_occluded
@@ -176,8 +176,8 @@ def warp(uv, color_ref, depth, height, width):
     # warped[uv_idx[..., 1], uv_idx[..., 0], ...] = color_ref  # inverse
     warped = color_ref[uv_idx[..., 1], uv_idx[..., 0], ...]
     warped, mask_occluded = error_erosion(warped, mask_occluded, mask_occlude)
-    warped[mask_occluded, :] = torch.tensor([255, 0, 0], dtype=warped.dtype)  # debug
-    warped[mask_occlude, :] = torch.tensor([0, 255, 0], dtype=warped.dtype)  # debug
+    # warped[mask_occluded, :] = torch.tensor([255, 0, 0], dtype=warped.dtype)  # debug
+    # warped[mask_occlude, :] = torch.tensor([0, 255, 0], dtype=warped.dtype)  # debug
     # warped[edge, :] = torch.tensor([0, 0, 255], dtype=warped.dtype)
     return warped
 
