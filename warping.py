@@ -153,14 +153,7 @@ def is_occlusion(uv, depth, height, width):
     return mask_occluded, mask_occlude
 
 
-error_erosion_kernel_size = 5
-error_erosion_kernel = list(product(
-    range(-error_erosion_kernel_size, error_erosion_kernel_size + 1),
-    range(-error_erosion_kernel_size, error_erosion_kernel_size + 1)
-))
-
-
-def error_erosion(warped, mask_occluded, mask_occlude, occluded_dilation_size=0, occlude_dilation_size=0):
+def error_erosion(warped, mask_occluded, mask_occlude, kernel_size=5, occluded_dilation_size=0, occlude_dilation_size=0):
     assert mask_occluded.dim() == mask_occlude.dim() == 2
     assert mask_occluded.shape == mask_occlude.shape
     height, width = mask_occluded.shape
@@ -175,7 +168,9 @@ def error_erosion(warped, mask_occluded, mask_occlude, occluded_dilation_size=0,
     # return warped, mask_occluded  # debug
 
     # get kernel for fixing warping error
-    kernel = torch.tensor(error_erosion_kernel)
+    kernel = torch.cartesian_prod(
+        torch.arange(-kernel_size, kernel_size+1, dtype=torch.int64),
+        torch.arange(-kernel_size, kernel_size+1, dtype=torch.int64))
     kernels = edge_pos.unsqueeze(1) + kernel.unsqueeze(0)  # region to be erosion
     kernels[..., 0].clamp_(0, height-1)
     kernels[..., 1].clamp_(0, width-1)
@@ -259,6 +254,7 @@ def warp(uv, color_ref, depth):
     # return warped
 
     # mask_occluded_last = mask_occluded.clone()  # debug
+    kernel_size, occluded_dilation_size, occlude_dilation_size = 5, 5, 5
     warped, mask_occluded, validcount = error_erosion(warped, mask_occluded, mask_occlude)
     while mask_occluded.sum() > 0 and validcount > 0:
         warped, mask_occluded, validcount = error_erosion(warped, mask_occluded, mask_occlude)
