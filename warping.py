@@ -27,7 +27,10 @@ def read_color(idx):
 
 
 def read_camera_color(idx):
-    return *read_camera(idx), read_color(idx)
+    K, R_c2w, T_c2w, height, width = read_camera(idx)
+    color = read_color(idx)
+    assert color.shape[0] == height and color.shape[1] == width, ValueError("Size of color image should match camera")
+    return K, R_c2w, T_c2w, color
 
 
 def read_depth(idx):
@@ -35,15 +38,19 @@ def read_depth(idx):
 
 
 def read_camera_depth(idx):
-    return *read_camera(idx), read_depth(idx)
+    K, R_c2w, T_c2w, height, width = read_camera(idx)
+    depth = read_depth(idx)
+    assert depth.shape[0] == height and depth.shape[1] == width, ValueError("Size of depth map should match camera")
+    return K, R_c2w, T_c2w, depth
 
 
 def read_camera_rgbd(idx):
     return *read_camera(idx), read_color(idx), read_depth(idx)
 
 
-def to_pcd(K, R_c2w, T_c2w, height, width, depth):
+def reconstrucion(K, R_c2w, T_c2w, depth):
     """Reconstruct point cloud from camera and depth map"""
+    height, width = depth.shape
     uv = torch.ones((height, width, 3), dtype=torch.float32)
     uv[..., 0] = torch.arange(0, width, dtype=torch.float32).unsqueeze(0).expand(height, -1)
     uv[..., 1] = torch.arange(0, height, dtype=torch.float32).unsqueeze(1).expand(-1, width)
@@ -53,8 +60,9 @@ def to_pcd(K, R_c2w, T_c2w, height, width, depth):
     return xyz_world.T.reshape(*uv.shape)
 
 
-def projection(K, R_c2w, T_c2w, height, width, xyz):
+def projection(K, R_c2w, T_c2w, xyz):
     """Project point cloud to camera"""
+    height, width = xyz.shape[:2]
     xyz_world = xyz.reshape(-1, 3).T
     xyz_camera = torch.inverse(R_c2w) @ (xyz_world - T_c2w.unsqueeze(1))
     uvz = K @ xyz_camera
@@ -62,8 +70,9 @@ def projection(K, R_c2w, T_c2w, height, width, xyz):
     return uv, uvz[-1, ...].reshape(height, width)
 
 
-def render(uv, color_ref, height, width):
+def render(uv, color_ref):
     """Warp (have warping error)"""
+    height, width = uv.shape[:2]
     grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
     warped = F.grid_sample(color_ref.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
                            mode='bilinear', align_corners=True)[0, ...].type(torch.uint8)
@@ -183,9 +192,8 @@ def error_erosion(warped, mask_occluded, mask_occlude):
         mask_occluded.type(torch.float32)[None, None, ...],
         kernel_size=mask_occlude_dilation_kernel_size, stride=1, padding=mask_occlude_dilation_padding
     ).type(torch.bool)[0, 0, ...]
-    kernel_avgcolormask = ~mask_occlude[kernels[..., 0], kernels[..., 1]]  # donot use color in occlude region
-    kernel_avgcolormask &= ~mask_occluded_dilated[kernels[..., 0],
-                                                  kernels[..., 1]]  # donot use color in occluded region
+    kernel_avgcolormask = ~mask_occlude[kernels[..., 0], kernels[..., 1]]  # no use color in occlude region
+    kernel_avgcolormask &= ~mask_occluded_dilated[kernels[..., 0], kernels[..., 1]]  # no use color in occluded region
     # avgcolor_pos = kernels[kernel_avgcolormask, ...]
     # warped[avgcolor_pos[..., 0], avgcolor_pos[..., 1], ...] = torch.tensor([0, 255, 0], dtype=torch.uint8)  # debug
     # return warped, mask_occluded  # debug
@@ -248,23 +256,12 @@ def main(args):
     # warp a reference image to local rendered image
     idx_loc = args.local  # local rendered image
     idx_ref = args.reference  # reference image
-    K, R_c2w, T_c2w, height, width, depth = read_camera_depth(idx_loc)
-    xyz = to_pcd(K, R_c2w, T_c2w, height, width, depth)  # xyz[uv on local rendered image] = pos in 3D space
-    K_r, R_r, t_r, height_r, width_r = read_camera(idx_ref)
-    uv, z = projection(K_r, R_r, t_r, height_r, width_r, xyz)  # uv[uv on local rendered image] = uv on reference
-    color = torch.tensor(read_color(idx_loc))  # local rendered image
-    color_ref = torch.tensor(read_color(idx_ref))  # reference image
-    if args.debug:
-        import time
-        st = time.time()
-        warped = warp(uv, color_ref, z, height, width)  # wrap it
-        torch.cuda.synchronize(torch.device("cuda"))
-        et = time.time()
-        print(et - st)
-        rendered = render(uv, color_ref, height, width)  # wrap it
-        # cv2.imwrite("warped.png", warped.cpu().numpy())
-        # cv2.imwrite("rendered.png", rendered.cpu().numpy())
+    K, R_c2w, T_c2w, depth = read_camera_depth(idx_loc)
+    xyz = reconstrucion(K, R_c2w, T_c2w, depth)  # xyz[uv on local rendered image] = pos in 3D space
 
+    if args.debug:
+        color = torch.tensor(read_color(idx_loc))  # local rendered image
+        assert color.shape[:2] == depth.shape, ValueError("Size of depth map should match color image")
         import open3d as o3d
         pcd = o3d.geometry.PointCloud()
         idx = torch.abs(xyz).sum(axis=-1) < 1000
@@ -272,6 +269,33 @@ def main(args):
         pcd.colors = o3d.utility.Vector3dVector(color[idx, ...][..., [2, 1, 0]].cpu().numpy().astype(np.float32)/255)
         o3d.visualization.draw_geometries([pcd])
 
+    K_r, R_r, t_r, color_ref = read_camera_color(idx_ref)
+    uv, z = projection(K_r, R_r, t_r, xyz)  # uv[uv on local rendered image] = uv on reference
+
+    if args.debug:
+        rendered = render(uv, color_ref)  # wrap it
+        cv2.imwrite("rendered.png", rendered.cpu().numpy())  # debug
+        import matplotlib.pyplot as plt
+        fig = plt.figure(figsize=(16, 12))
+        ax = fig.subplots()
+        ax.imshow(rendered[..., [2, 1, 0]].cpu().numpy())
+        fig.tight_layout(pad=5)
+        plt.show()
+
+    height, width = uv.shape[:2]
+    warped = warp(uv, color_ref, z, height, width)  # wrap it
+
+    if args.debug:
+        import time
+        cv2.imwrite("warped.png", warped.cpu().numpy())
+        st = time.time()
+        for i in range(100):
+            warped = warp(uv, color_ref, z, height, width)  # wrap it
+        torch.cuda.synchronize(torch.device("cuda"))
+        et = time.time()
+        print((et - st)/100)
+
+    if args.debug:
         import matplotlib.pyplot as plt
         fig = plt.figure(figsize=(16, 12))
         axs = fig.subplots(ncols=2, nrows=2)
