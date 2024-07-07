@@ -234,13 +234,20 @@ def error_erosion(warped, mask_occluded, mask_occlude):
 
 
 def warp(uv, color_ref, depth, height, width):
-    uv_idx = uv[..., :2].round().type(torch.int64)
+    height, width = color_ref.shape[:2]
+    # done by grid_sample, same result, may be faster?
+    # grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
+    # warped = F.grid_sample(color_ref.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
+    #                        mode='bilinear', align_corners=True)[0, ...].type(torch.uint8).permute(1, 2, 0)
+    uv_idx = uv[..., :2]
+    uv_idx = uv_idx.round().type(torch.int64)
     uv_idx[..., 1].clamp_(0, height-1)
     uv_idx[..., 0].clamp_(0, width-1)
-    mask_occluded, mask_occlude = is_occlusion(uv_idx, depth, height, width)
+    warped = color_ref[uv_idx[..., 1], uv_idx[..., 0], ...]
     # warped = torch.zeros_like(color_ref)  # inverse
     # warped[uv_idx[..., 1], uv_idx[..., 0], ...] = color_ref  # inverse
-    warped = color_ref[uv_idx[..., 1], uv_idx[..., 0], ...]
+
+    mask_occluded, mask_occlude = is_occlusion(uv_idx, depth, height, width)
     # mask_occluded_last = mask_occluded.clone()  # debug
     # warped, mask_occluded = error_erosion(warped, mask_occluded, mask_occlude)
     # warped[mask_occluded_last, :] = torch.tensor([255, 0, 0], dtype=warped.dtype)  # debug
