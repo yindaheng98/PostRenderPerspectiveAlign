@@ -192,7 +192,7 @@ def error_erosion(warped, mask_occluded, mask_occlude):
     # where to assign color
     kernel_assignmask = mask_occluded[kernels[..., 0], kernels[..., 1]]  # only assign color to occluded region
     kernel_assignmask &= ~mask_occlude[kernels[..., 0], kernels[..., 1]]  # donot assign color in occlude region
-    # assign_pos = kernels[kernel_assignmask, ...]
+    # assign_pos = kernels[kernel_assignmask, ...]  # debug
     # warped[assign_pos[..., 0], assign_pos[..., 1], ...] = torch.tensor([0, 0, 255], dtype=torch.uint8)  # debug
     # return warped, mask_occluded  # debug
 
@@ -203,7 +203,7 @@ def error_erosion(warped, mask_occluded, mask_occlude):
     ).type(torch.bool)[0, 0, ...]
     kernel_avgcolormask = ~mask_occlude[kernels[..., 0], kernels[..., 1]]  # no use color in occlude region
     kernel_avgcolormask &= ~mask_occluded_dilated[kernels[..., 0], kernels[..., 1]]  # no use color in occluded region
-    # avgcolor_pos = kernels[kernel_avgcolormask, ...]
+    # avgcolor_pos = kernels[kernel_avgcolormask, ...]  # debug
     # warped[avgcolor_pos[..., 0], avgcolor_pos[..., 1], ...] = torch.tensor([0, 255, 0], dtype=torch.uint8)  # debug
     # return warped, mask_occluded  # debug
 
@@ -236,7 +236,7 @@ def error_erosion(warped, mask_occluded, mask_occlude):
     return warped, mask_occluded
 
 
-def warp(uv, color_ref, depth, height, width):
+def warp(uv, color_ref, depth):
     height, width = color_ref.shape[:2]
     # done by grid_sample, same result, may be faster?
     # grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
@@ -259,8 +259,7 @@ def warp(uv, color_ref, depth, height, width):
     # warped, mask_occluded = error_erosion(warped, mask_occluded, mask_occlude)
     # warped[mask_occluded_last, :] = torch.tensor([255, 0, 0], dtype=warped.dtype)  # debug
     # warped[mask_occluded, :] = torch.tensor([0, 255, 0], dtype=warped.dtype)  # debug
-    # warped[mask_occlude, :] = torch.tensor([0, 255, 0], dtype=warped.dtype)  # debug
-    # warped[edge, :] = torch.tensor([0, 0, 255], dtype=warped.dtype)
+    # warped[mask_occlude, :] = torch.tensor([0, 0, 255], dtype=warped.dtype)  # debug
     # return warped
     while mask_occluded.sum() > 0:
         warped, mask_occluded = error_erosion(warped, mask_occluded, mask_occlude)
@@ -308,15 +307,14 @@ def main(args):
         fig.tight_layout(pad=5)
         plt.show()
 
-    height, width = uv.shape[:2]
-    warped = warp(uv, color_ref, z, height, width)  # wrap it
+    warped = warp(uv, color_ref, z)  # wrap it
 
     if args.debug:
         import time
         cv2.imwrite("warped.png", warped.cpu().numpy())
         st = time.time()
         for i in range(100):
-            warped = warp(uv, color_ref, z, height, width)  # wrap it
+            warped = warp(uv, color_ref, z)  # wrap it
         torch.cuda.synchronize(torch.device("cuda"))
         et = time.time()
         print((et - st)/100)
