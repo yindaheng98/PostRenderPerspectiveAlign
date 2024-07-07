@@ -72,11 +72,17 @@ def projection(K, R_c2w, T_c2w, xyz):
 
 def render(uv, color_ref):
     """Warp (have warping error)"""
-    height, width = uv.shape[:2]
-    grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
-    warped = F.grid_sample(color_ref.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
-                           mode='bilinear', align_corners=True)[0, ...].type(torch.uint8)
-    return warped.permute(1, 2, 0)
+    height, width = color_ref.shape[:2]
+    # done by grid_sample, same result, may be faster?
+    # grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
+    # warped = F.grid_sample(color_ref.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
+    #                        mode='bilinear', align_corners=True)[0, ...].type(torch.uint8).permute(1, 2, 0)
+    uv_idx = uv[..., :2]
+    uv_idx = uv_idx.round().type(torch.int64)
+    uv_idx[..., 1].clamp_(0, height-1)
+    uv_idx[..., 0].clamp_(0, width-1)
+    warped = color_ref[uv_idx[..., 1], uv_idx[..., 0], ...]
+    return warped
 
 
 def count(uv, height, width):
@@ -276,9 +282,14 @@ def main(args):
         rendered = render(uv, color_ref)  # wrap it
         cv2.imwrite("rendered.png", rendered.cpu().numpy())  # debug
         import matplotlib.pyplot as plt
-        fig = plt.figure(figsize=(16, 12))
-        ax = fig.subplots()
-        ax.imshow(rendered[..., [2, 1, 0]].cpu().numpy())
+        fig = plt.figure(figsize=(24, 6))
+        axs = fig.subplots(ncols=3, nrows=1)
+        axs[0].set_title('reference image')
+        axs[0].imshow(color_ref[..., [2, 1, 0]].cpu().numpy())
+        axs[1].set_title('reconstructed point cloud')
+        axs[1].imshow(rendered[..., [2, 1, 0]].cpu().numpy())
+        axs[2].set_title('local rendered image')
+        axs[2].imshow(color[..., [2, 1, 0]].cpu().numpy())
         fig.tight_layout(pad=5)
         plt.show()
 
