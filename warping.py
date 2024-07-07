@@ -226,9 +226,11 @@ def error_erosion(warped, mask_occluded, mask_occlude, kernel_size=5, occluded_d
 
     # assign avg color in the kernel
     assign_pos = kernels[kernel_assignmask, ...]
+    if len(assign_pos) <= 0:
+        return warped, mask_occluded, 0
     warped[assign_pos[..., 0], assign_pos[..., 1], ...] = kernel_assigncolor
     mask_occluded[assign_pos[..., 0], assign_pos[..., 1]] = False
-    return warped, mask_occluded, len(kernels)
+    return warped, mask_occluded, len(assign_pos)
 
 
 def MorphologyErosion(binary, kernel_size=1):
@@ -257,8 +259,8 @@ def warp(uv, color_ref, depth):
     # warped[uv_idx[..., 1], uv_idx[..., 0], ...] = color_ref  # inverse
 
     mask_occluded, mask_occlude = is_occlusion(uv_idx, depth, height, width)
-    # mask_occluded = MorphologyClose(mask_occluded)
-    # mask_occlude = MorphologyClose(mask_occlude)
+    mask_occluded = MorphologyClose(mask_occluded)
+    mask_occlude = MorphologyClose(mask_occlude)
     # warped[mask_occluded, :] = torch.tensor([0, 0, 255], dtype=warped.dtype)  # debug
     # warped[mask_occlude, :] = torch.tensor([0, 255, 0], dtype=warped.dtype)  # debug
     # return warped
