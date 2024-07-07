@@ -259,14 +259,13 @@ def warp(uv, color_ref, depth):
     # return warped
 
     # mask_occluded_last = mask_occluded.clone()  # debug
-    # warped, mask_occluded = error_erosion(warped, mask_occluded, mask_occlude)
-    # warped[mask_occluded_last, :] = torch.tensor([255, 0, 0], dtype=warped.dtype)  # debug
-    # warped[mask_occluded, :] = torch.tensor([0, 255, 0], dtype=warped.dtype)  # debug
-    # warped[mask_occlude, :] = torch.tensor([0, 0, 255], dtype=warped.dtype)  # debug
-    # return warped
-    while mask_occluded.sum() > 0:
+    warped, mask_occluded, validcount = error_erosion(warped, mask_occluded, mask_occlude)
+    while mask_occluded.sum() > 0 and validcount > 0:
         warped, mask_occluded, validcount = error_erosion(warped, mask_occluded, mask_occlude)
-        print(validcount)
+        print(validcount, mask_occluded.sum())  # debug
+    # warped[mask_occluded_last, :] = torch.tensor([255, 0, 0], dtype=warped.dtype)  # debug
+    warped[mask_occluded, :] = torch.tensor([0, 255, 0], dtype=warped.dtype)  # debug
+    # warped[mask_occlude, :] = torch.tensor([0, 0, 255], dtype=warped.dtype)  # debug
     return warped
 
 
