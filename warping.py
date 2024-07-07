@@ -4,7 +4,7 @@ import json
 from itertools import product
 import torch
 import torch.nn.functional as F
-import time
+import argparse
 
 
 def read_camera(idx):
@@ -184,7 +184,8 @@ def error_erosion(warped, mask_occluded, mask_occlude):
         kernel_size=mask_occlude_dilation_kernel_size, stride=1, padding=mask_occlude_dilation_padding
     ).type(torch.bool)[0, 0, ...]
     kernel_avgcolormask = ~mask_occlude[kernels[..., 0], kernels[..., 1]]  # donot use color in occlude region
-    kernel_avgcolormask &= ~mask_occluded_dilated[kernels[..., 0], kernels[..., 1]]  # donot use color in occluded region
+    kernel_avgcolormask &= ~mask_occluded_dilated[kernels[..., 0],
+                                                  kernels[..., 1]]  # donot use color in occluded region
     # avgcolor_pos = kernels[kernel_avgcolormask, ...]
     # warped[avgcolor_pos[..., 0], avgcolor_pos[..., 1], ...] = torch.tensor([0, 255, 0], dtype=torch.uint8)  # debug
     # return warped, mask_occluded  # debug
@@ -237,43 +238,56 @@ def warp(uv, color_ref, depth, height, width):
     return warped
 
 
-# warp a reference image to local rendered image
-with torch.device("cuda"):
-    idx_loc = "output/coffee_martini/frame1-SH1/train_interp/ours_30000/renders/00001"  # local rendered image
-    idx_ref = "output/coffee_martini/frame1-SH1/train_interp/ours_30000/renders/00000"  # reference image
+parser = argparse.ArgumentParser()
+parser.add_argument("--local", type=str, required=True, help="Index of locally rendered image.")
+parser.add_argument("--reference", type=str, required=True, help="Index of reference image.")
+parser.add_argument("--debug", action="store_true")
+
+
+def main(args):
+    # warp a reference image to local rendered image
+    idx_loc = args.local  # local rendered image
+    idx_ref = args.reference  # reference image
     K, R_c2w, T_c2w, height, width, depth = read_camera_depth(idx_loc)
     xyz = to_pcd(K, R_c2w, T_c2w, height, width, depth)  # xyz[uv on local rendered image] = pos in 3D space
     K_r, R_r, t_r, height_r, width_r = read_camera(idx_ref)
     uv, z = projection(K_r, R_r, t_r, height_r, width_r, xyz)  # uv[uv on local rendered image] = uv on reference
-    grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
     color = torch.tensor(read_color(idx_loc))  # local rendered image
     color_ref = torch.tensor(read_color(idx_ref))  # reference image
-    st = time.time()
-    warped = warp(uv, color_ref, z, height, width)  # wrap it
-    torch.cuda.synchronize(torch.device("cuda"))
-    et = time.time()
-    print(et - st)
-    rendered = render(uv, color_ref, height, width)  # wrap it
-    # cv2.imwrite("warped.png", warped.cpu().numpy())
-    # cv2.imwrite("rendered.png", rendered.cpu().numpy())
+    if args.debug:
+        import time
+        st = time.time()
+        warped = warp(uv, color_ref, z, height, width)  # wrap it
+        torch.cuda.synchronize(torch.device("cuda"))
+        et = time.time()
+        print(et - st)
+        rendered = render(uv, color_ref, height, width)  # wrap it
+        # cv2.imwrite("warped.png", warped.cpu().numpy())
+        # cv2.imwrite("rendered.png", rendered.cpu().numpy())
 
-    import open3d as o3d
-    pcd = o3d.geometry.PointCloud()
-    idx = torch.abs(xyz).sum(axis=-1) < 1000
-    pcd.points = o3d.utility.Vector3dVector(xyz[idx, ...].cpu().numpy())
-    pcd.colors = o3d.utility.Vector3dVector(color[idx, ...][..., [2, 1, 0]].cpu().numpy().astype(np.float32)/255)
-    o3d.visualization.draw_geometries([pcd])
+        import open3d as o3d
+        pcd = o3d.geometry.PointCloud()
+        idx = torch.abs(xyz).sum(axis=-1) < 1000
+        pcd.points = o3d.utility.Vector3dVector(xyz[idx, ...].cpu().numpy())
+        pcd.colors = o3d.utility.Vector3dVector(color[idx, ...][..., [2, 1, 0]].cpu().numpy().astype(np.float32)/255)
+        o3d.visualization.draw_geometries([pcd])
 
-    import matplotlib.pyplot as plt
-    fig = plt.figure(figsize=(16, 12))
-    axs = fig.subplots(ncols=2, nrows=2)
-    axs[0, 0].set_title('reference image')
-    axs[0, 0].imshow(color_ref[..., [2, 1, 0]].cpu().numpy())
-    axs[0, 1].set_title('reconstructed point cloud')
-    axs[0, 1].imshow(rendered[..., [2, 1, 0]].cpu().numpy())
-    axs[1, 0].set_title('local rendered image')
-    axs[1, 0].imshow(color[..., [2, 1, 0]].cpu().numpy())
-    axs[1, 1].set_title('warped image')
-    axs[1, 1].imshow(warped[..., [2, 1, 0]].cpu().numpy())
-    fig.tight_layout(pad=5)
-    plt.show()
+        import matplotlib.pyplot as plt
+        fig = plt.figure(figsize=(16, 12))
+        axs = fig.subplots(ncols=2, nrows=2)
+        axs[0, 0].set_title('reference image')
+        axs[0, 0].imshow(color_ref[..., [2, 1, 0]].cpu().numpy())
+        axs[0, 1].set_title('reconstructed point cloud')
+        axs[0, 1].imshow(rendered[..., [2, 1, 0]].cpu().numpy())
+        axs[1, 0].set_title('local rendered image')
+        axs[1, 0].imshow(color[..., [2, 1, 0]].cpu().numpy())
+        axs[1, 1].set_title('warped image')
+        axs[1, 1].imshow(warped[..., [2, 1, 0]].cpu().numpy())
+        fig.tight_layout(pad=5)
+        plt.show()
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    with torch.device("cuda"):
+        main(args)
