@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 import json
-from itertools import product
 import torch
 import torch.nn.functional as F
 import argparse
@@ -153,7 +152,7 @@ def is_occlusion(uv, depth, height, width):
     return mask_occluded, mask_occlude
 
 
-def MorphologyEilation(binary, kernel_size=1):
+def MorphologyDilation(binary, kernel_size=1):
     return F.max_pool2d(  # dilation the occluded region
         binary.type(torch.float32)[None, None, ...],
         kernel_size=kernel_size*2+1, stride=1, padding=kernel_size
@@ -166,7 +165,7 @@ def error_erosion(warped, mask_occluded, mask_occlude, kernel_size=5, occluded_d
     height, width = mask_occluded.shape
 
     # get edge of occluded region
-    edge = MorphologyEilation(mask_occluded) & ~mask_occluded  # xor with the occluded region to get the edge
+    edge = MorphologyDilation(mask_occluded) & ~mask_occluded  # xor with the occluded region to get the edge
     edge_pos = edge.nonzero()
     # warped[edge_pos[..., 0], edge_pos[..., 1], ...] = torch.tensor([0, 0, 255], dtype=torch.uint8)  # debug
     # return warped, mask_occluded  # debug
@@ -191,10 +190,10 @@ def error_erosion(warped, mask_occluded, mask_occlude, kernel_size=5, occluded_d
     # where to collect color for avg
     mask_occluded_dilated = mask_occluded
     if occluded_dilation_size > 0:
-        mask_occluded_dilated = MorphologyEilation(mask_occluded, kernel_size=occluded_dilation_size)
+        mask_occluded_dilated = MorphologyDilation(mask_occluded, kernel_size=occluded_dilation_size)
     mask_occlude_dilated = mask_occlude
     if occlude_dilation_size > 0:
-        mask_occlude_dilated = MorphologyEilation(mask_occlude, kernel_size=occlude_dilation_size)
+        mask_occlude_dilated = MorphologyDilation(mask_occlude, kernel_size=occlude_dilation_size)
     kernel_avgcolormask = ~mask_occluded_dilated[kernels[..., 0], kernels[..., 1]]  # no use color in occluded region
     kernel_avgcolormask &= ~mask_occlude_dilated[kernels[..., 0], kernels[..., 1]]  # no use color in occlude region
     # avgcolor_pos = kernels[kernel_avgcolormask, ...]  # debug
@@ -232,6 +231,17 @@ def error_erosion(warped, mask_occluded, mask_occlude, kernel_size=5, occluded_d
     return warped, mask_occluded, len(kernels)
 
 
+def MorphologyErosion(binary, kernel_size=1):
+    return (~F.max_pool2d(  # dilation the occluded region
+        (~binary).type(torch.float32)[None, None, ...],
+        kernel_size=kernel_size*2+1, stride=1, padding=kernel_size
+    ).type(torch.bool))[0, 0, ...]
+
+
+def MorphologyClose(binary, kernel_size=1):
+    return MorphologyErosion(MorphologyDilation(binary, kernel_size=kernel_size), kernel_size=kernel_size)
+
+
 def warp(uv, color_ref, depth):
     height, width = color_ref.shape[:2]
     # done by grid_sample, same result, may be faster?
@@ -247,6 +257,8 @@ def warp(uv, color_ref, depth):
     # warped[uv_idx[..., 1], uv_idx[..., 0], ...] = color_ref  # inverse
 
     mask_occluded, mask_occlude = is_occlusion(uv_idx, depth, height, width)
+    # mask_occluded = MorphologyClose(mask_occluded)
+    # mask_occlude = MorphologyClose(mask_occlude)
     # warped[mask_occluded, :] = torch.tensor([0, 0, 255], dtype=warped.dtype)  # debug
     # warped[mask_occlude, :] = torch.tensor([0, 255, 0], dtype=warped.dtype)  # debug
     # return warped
@@ -258,14 +270,14 @@ def warp(uv, color_ref, depth):
         kernel_size=kernel_size,
         occluded_dilation_size=occluded_dilation_size,
         occlude_dilation_size=occlude_dilation_size)
-    # print(validcount, mask_occluded.sum())  # debug
+    print(validcount, mask_occluded.sum())  # debug
     while mask_occluded.sum() > 0 and validcount > 0:
         warped, mask_occluded, validcount = error_erosion(
             warped, mask_occluded, mask_occlude,
             kernel_size=kernel_size,
             occluded_dilation_size=occluded_dilation_size,
             occlude_dilation_size=occlude_dilation_size)
-        # print(validcount, mask_occluded.sum())  # debug
+        print(validcount, mask_occluded.sum())  # debug
         if validcount <= 0:
             occluded_dilation_size -= 1
             occlude_dilation_size -= 1
@@ -274,9 +286,9 @@ def warp(uv, color_ref, depth):
                 kernel_size=kernel_size,
                 occluded_dilation_size=occluded_dilation_size,
                 occlude_dilation_size=occlude_dilation_size)
-        # print(validcount, mask_occluded.sum())  # debug
+        print(validcount, mask_occluded.sum())  # debug
     # warped[mask_occluded_last, :] = torch.tensor([255, 0, 0], dtype=warped.dtype)  # debug
-    warped[mask_occluded, :] = torch.tensor([0, 255, 0], dtype=warped.dtype)  # debug
+    # warped[mask_occluded, :] = torch.tensor([0, 255, 0], dtype=warped.dtype)  # debug
     # warped[mask_occlude, :] = torch.tensor([0, 0, 255], dtype=warped.dtype)  # debug
     return warped
 
