@@ -158,11 +158,9 @@ error_erosion_kernel = list(product(
     range(-error_erosion_kernel_size, error_erosion_kernel_size + 1),
     range(-error_erosion_kernel_size, error_erosion_kernel_size + 1)
 ))
-mask_occlude_dilation_kernel_size = 5
-mask_occlude_dilation_padding = 2
 
 
-def error_erosion(warped, mask_occluded, mask_occlude):
+def error_erosion(warped, mask_occluded, mask_occlude, occluded_dilation_size=0, occlude_dilation_size=0):
     assert mask_occluded.dim() == mask_occlude.dim() == 2
     assert mask_occluded.shape == mask_occlude.shape
     height, width = mask_occluded.shape
@@ -172,11 +170,6 @@ def error_erosion(warped, mask_occluded, mask_occlude):
         mask_occluded.type(torch.float32)[None, None, ...],
         kernel_size=3, stride=1, padding=1
     ).type(torch.bool)[0, 0, ...] & ~mask_occluded  # xor with the occluded region to get the edge
-    # mask_occlude_dilation = F.max_pool2d(  # dilation the occluded region
-    #     mask_occlude.type(torch.float32)[None, None, ...],
-    #     kernel_size=mask_occlude_dilation_kernel_size, stride=1, padding=mask_occlude_dilation_padding
-    # ).type(torch.bool)[0, 0, ...]
-    # edge_pos = (edge & ~mask_occlude_dilation).nonzero()  # edge in occlude region is not edge
     edge_pos = edge.nonzero()
     # warped[edge_pos[..., 0], edge_pos[..., 1], ...] = torch.tensor([0, 0, 255], dtype=torch.uint8)  # debug
     # return warped, mask_occluded  # debug
@@ -197,12 +190,20 @@ def error_erosion(warped, mask_occluded, mask_occlude):
     # return warped, mask_occluded  # debug
 
     # where to collect color for avg
-    mask_occluded_dilated = F.max_pool2d(  # dilation the occluded region
-        mask_occluded.type(torch.float32)[None, None, ...],
-        kernel_size=mask_occlude_dilation_kernel_size, stride=1, padding=mask_occlude_dilation_padding
-    ).type(torch.bool)[0, 0, ...]
-    kernel_avgcolormask = ~mask_occlude[kernels[..., 0], kernels[..., 1]]  # no use color in occlude region
-    kernel_avgcolormask &= ~mask_occluded_dilated[kernels[..., 0], kernels[..., 1]]  # no use color in occluded region
+    mask_occluded_dilated = mask_occluded
+    if occluded_dilation_size > 0:
+        mask_occluded_dilated = F.max_pool2d(  # dilation the occluded region
+            mask_occluded.type(torch.float32)[None, None, ...],
+            kernel_size=occluded_dilation_size*2+1, stride=1, padding=occluded_dilation_size
+        ).type(torch.bool)[0, 0, ...]
+    mask_occlude_dilated = mask_occlude
+    if occlude_dilation_size > 0:
+        mask_occlude_dilated = F.max_pool2d(  # dilation the occluded region
+            mask_occlude.type(torch.float32)[None, None, ...],
+            kernel_size=occlude_dilation_size*2+1, stride=1, padding=occlude_dilation_size
+        ).type(torch.bool)[0, 0, ...]
+    kernel_avgcolormask = ~mask_occluded_dilated[kernels[..., 0], kernels[..., 1]]  # no use color in occluded region
+    kernel_avgcolormask &= ~mask_occlude_dilated[kernels[..., 0], kernels[..., 1]]  # no use color in occlude region
     # avgcolor_pos = kernels[kernel_avgcolormask, ...]  # debug
     # warped[avgcolor_pos[..., 0], avgcolor_pos[..., 1], ...] = torch.tensor([0, 255, 0], dtype=torch.uint8)  # debug
     # return warped, mask_occluded  # debug
@@ -213,6 +214,8 @@ def error_erosion(warped, mask_occluded, mask_occlude):
     kernels = kernels[kernel_valid, ...]
     # warped[kernels[..., 0], kernels[..., 1], ...] = torch.tensor([0, 0, 255], dtype=torch.uint8)  # debug
     # return warped, mask_occluded  # debug
+    if len(kernels) <= 0:
+        return warped, mask_occluded, 0
     kernel_assignmask = kernel_assignmask[kernel_valid, ...]
     # assign_pos = kernels[kernel_assignmask, ...]  # debug
     # warped[assign_pos[..., 0], assign_pos[..., 1], ...] = torch.tensor([0, 0, 255], dtype=torch.uint8)  # debug
@@ -233,7 +236,7 @@ def error_erosion(warped, mask_occluded, mask_occlude):
     assign_pos = kernels[kernel_assignmask, ...]
     warped[assign_pos[..., 0], assign_pos[..., 1], ...] = kernel_assigncolor
     mask_occluded[assign_pos[..., 0], assign_pos[..., 1]] = False
-    return warped, mask_occluded
+    return warped, mask_occluded, len(kernels)
 
 
 def warp(uv, color_ref, depth):
@@ -262,7 +265,8 @@ def warp(uv, color_ref, depth):
     # warped[mask_occlude, :] = torch.tensor([0, 0, 255], dtype=warped.dtype)  # debug
     # return warped
     while mask_occluded.sum() > 0:
-        warped, mask_occluded = error_erosion(warped, mask_occluded, mask_occlude)
+        warped, mask_occluded, validcount = error_erosion(warped, mask_occluded, mask_occlude)
+        print(validcount)
     return warped
 
 
