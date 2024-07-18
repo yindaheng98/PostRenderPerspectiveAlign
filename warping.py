@@ -221,7 +221,7 @@ def error_erosion(warped, mask_occluded, mask_occlude, kernel_size=5, occluded_d
     # collect and compute avg color in the kernel
     kernel_colors = warped[kernels[..., 0], kernels[..., 1]].type(torch.float32)
     kernel_colors[~kernel_avgcolormask, ...] = 0.
-    kernel_avgcolor = (kernel_colors.sum(dim=1) / kernel_validcolorcount.unsqueeze(-1)).type(torch.uint8)
+    kernel_avgcolor = (kernel_colors.sum(dim=1) / kernel_validcolorcount.unsqueeze(-1)).type(warped.dtype)
     kernel_assigncolor = kernel_avgcolor.unsqueeze(1).expand(-1, kernels.shape[1], -1)[kernel_assignmask, ...]
 
     # assign avg color in the kernel
