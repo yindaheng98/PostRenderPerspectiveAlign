@@ -6,9 +6,7 @@ import torch.nn.functional as F
 import argparse
 
 
-def read_camera(idx):
-    with open(idx + ".camera.json", "r") as f:
-        camera = json.load(f)
+def fromJSON(camera):
     height, width = camera["height"], camera["width"]
 
     R_c2w = torch.tensor(camera["rotation"])
@@ -19,6 +17,11 @@ def read_camera(idx):
         [0, 0, 1]
     ])
     return K, R_c2w, T_c2w, height, width
+
+
+def read_camera(idx):
+    with open(idx + ".camera.json", "r") as f:
+        return fromJSON(json.load(f))
 
 
 def read_color(idx):
