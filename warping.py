@@ -104,6 +104,7 @@ def get_min_depth(uv, depth, height, width):
 
 
 depth_diff_thr_for_occlusion = 0.5
+no_gaussian_depth = 6e4
 
 
 def is_occlusion(uv, depth, height, width):
@@ -126,6 +127,9 @@ def is_occlusion(uv, depth, height, width):
     mask_tmp[torch.logical_or(uv_tmp[..., 0] <= 0, uv_tmp[..., 0] >= width-1)] = False
     mask_tmp[torch.logical_or(uv_tmp[..., 1] <= 0, uv_tmp[..., 1] >= height-1)] = False
     mask_overlap[mask_overlap.clone()] = mask_tmp
+
+    # 无Gaussian的点不算在重合点中
+    mask_overlap[depth > no_gaussian_depth] = False
 
     # 计算深度差，用于区分重合点中：1、哪些点被其他点遮挡了；2、哪些点遮挡了其他点
     depthdiff = torch.abs(depth[mask_overlap] - mindepth_onloc[mask_overlap])
