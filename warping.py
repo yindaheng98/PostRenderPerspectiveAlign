@@ -4,6 +4,7 @@ import json
 import torch
 import torch.nn.functional as F
 import argparse
+import os
 
 
 def fromJSON(camera):
@@ -310,10 +311,12 @@ def warp(uv, color_ref, depth):
 parser = argparse.ArgumentParser()
 parser.add_argument("--local", type=str, required=True, help="Index of locally rendered image.")
 parser.add_argument("--reference", type=str, required=True, help="Index of reference image.")
+parser.add_argument("--warped", type=str, required=True, help="Index to save warped image.")
 parser.add_argument("--debug", action="store_true")
 
 
 def main(args):
+    os.makedirs(os.path.dirname(args.warped), exist_ok=True)
     # warp a reference image to local rendered image
     idx_loc = args.local  # local rendered image
     idx_ref = args.reference  # reference image
@@ -333,9 +336,10 @@ def main(args):
     K_r, R_r, t_r, color_ref = read_camera_color(idx_ref)
     uv, z = projection(K_r, R_r, t_r, xyz)  # uv[uv on local rendered image] = uv on reference
 
+    rendered = render(uv, color_ref)  # wrap it
+    cv2.imwrite(args.warped + ".no_error_erosion.png", rendered.cpu().numpy())  # debug
+
     if args.debug:
-        rendered = render(uv, color_ref)  # wrap it
-        cv2.imwrite("rendered.png", rendered.cpu().numpy())  # debug
         import matplotlib.pyplot as plt
         fig = plt.figure(figsize=(24, 6))
         axs = fig.subplots(ncols=3, nrows=1)
@@ -349,6 +353,7 @@ def main(args):
         plt.show()
 
     warped = warp(uv, color_ref, z)  # wrap it
+    cv2.imwrite(args.warped + ".png", warped.cpu().numpy())  # debug
 
     if args.debug:
         import time
