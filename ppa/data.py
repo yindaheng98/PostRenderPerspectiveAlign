@@ -17,32 +17,32 @@ def fromJSON(camera):
     return K, R_c2w, T_c2w, height, width
 
 
-def read_camera(idx):
-    with open(idx + ".camera.json", "r") as f:
+def read_camera(path):
+    with open(path, "r") as f:
         return fromJSON(json.load(f))
 
 
-def read_color(idx):
-    return torch.tensor(cv2.imread(idx + ".png"))
+def read_color(path):
+    return torch.tensor(cv2.imread(path))
 
 
-def read_camera_color(idx):
-    K, R_c2w, T_c2w, height, width = read_camera(idx)
-    color = read_color(idx)
+def read_camera_color(camerapath, colorpath):
+    K, R_c2w, T_c2w, height, width = read_camera(camerapath)
+    color = read_color(colorpath)
     assert color.shape[0] == height and color.shape[1] == width, ValueError("Size of color image should match camera")
     return K, R_c2w, T_c2w, color
 
 
-def read_depth(idx):
-    return torch.tensor(np.load(idx + ".depth.npz")["depth"][0, ...])
+def read_depth(path):
+    return torch.tensor(np.load(path)["depth"][0, ...])
 
 
-def read_camera_depth(idx):
-    K, R_c2w, T_c2w, height, width = read_camera(idx)
-    depth = read_depth(idx)
+def read_camera_depth(camerapath, depthpath):
+    K, R_c2w, T_c2w, height, width = read_camera(camerapath)
+    depth = read_depth(depthpath)
     assert depth.shape[0] == height and depth.shape[1] == width, ValueError("Size of depth map should match camera")
     return K, R_c2w, T_c2w, depth
 
 
-def read_camera_rgbd(idx):
-    return *read_camera(idx), read_color(idx), read_depth(idx)
+def read_camera_rgbd(camerapath, colorpath, depthpath):
+    return *read_camera(camerapath), read_color(colorpath), read_depth(depthpath)
