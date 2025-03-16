@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 
 
 def projection(K, R_c2w, T_c2w, xyz):
@@ -14,13 +15,15 @@ def projection(K, R_c2w, T_c2w, xyz):
 def render(uv, color_ref):
     """Warp (have warping error)"""
     height, width = color_ref.shape[:2]
-    # done by grid_sample, same result, may be faster?
-    # grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
-    # warped = F.grid_sample(color_ref.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
-    #                        mode='bilinear', align_corners=True)[0, ...].type(torch.uint8).permute(1, 2, 0)
     uv_idx = uv[..., :2]
     uv_idx = uv_idx.round().type(torch.int64)
     uv_idx[..., 1].clamp_(0, height-1)
     uv_idx[..., 0].clamp_(0, width-1)
     warped = color_ref[uv_idx[..., 1], uv_idx[..., 0], ...]
+    """
+    # done by grid_sample, same result, may be faster?
+    grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
+    warped = F.grid_sample(color_ref.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
+                           mode='bilinear', align_corners=True)[0, ...].type(torch.uint8).permute(1, 2, 0)
+    """
     return warped
