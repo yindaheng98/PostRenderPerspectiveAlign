@@ -5,4 +5,3 @@ from .morph import MorphologyErosion, MorphologyDilation, MorphologyClose
 from .erosion import error_erosion
 from .warp import warp
 from .prpa import PRPA, Camera, Target, Reference
-from .data import read_camera_color, read_camera_depth

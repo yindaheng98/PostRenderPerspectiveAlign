@@ -3,7 +3,8 @@ import numpy as np
 import torch
 import argparse
 import os
-from prpa import reconstruction, projection, render, warp, PRPA, read_camera_color, read_camera_depth
+from prpa import reconstruction, projection, render, warp, PRPA
+from prpa.data import read_camera_color, read_camera_depth
 
 
 parser = argparse.ArgumentParser()
