@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import argparse
 import os
-from prpa import reconstruction, projection, render, warp, PRPA, Target, Reference, read_camera_color, read_camera_depth
+from prpa import reconstruction, projection, render, warp, PRPA, read_camera_color, read_camera_depth
 
 
 parser = argparse.ArgumentParser()
@@ -24,7 +24,7 @@ def main(args):
     K, R_c2w, T_c2w, depth = target.K, target.R, target.T, target.depth
     xyz = reconstruction(K, R_c2w, T_c2w, depth)  # xyz[uv on local rendered image] = pos in 3D space
 
-    if args.debug:
+    if args.debug:  # show reconstructed point cloud
         from prpa.data import read_color
         color = torch.tensor(read_color(idx_loc + ".png"))  # local rendered image
         assert color.shape[:2] == depth.shape, ValueError("Size of depth map should match color image")
@@ -45,7 +45,7 @@ def main(args):
     rendered = render(uv, color_ref)  # wrap it
     cv2.imwrite(args.warped + ".no_error_erosion.png", rendered.cpu().numpy())  # debug
 
-    if args.debug:
+    if args.debug:  # show rendered image
         import matplotlib.pyplot as plt
         fig = plt.figure(figsize=(24, 6))
         axs = fig.subplots(ncols=3, nrows=1)
@@ -62,16 +62,7 @@ def main(args):
     warped = warp(uv, color_ref, z)  # wrap = render + error erosion
     cv2.imwrite(args.warped + ".png", warped.cpu().numpy())  # debug
 
-    if args.debug:
-        import time
-        st = time.time()
-        for i in range(10):
-            warped = PRPA(target, reference)  # complete algorithm
-        torch.cuda.synchronize(torch.device("cuda"))
-        et = time.time()
-        print(f"Speed: {(et - st)/100}s")
-
-    if args.debug:
+    if args.debug:  # show error-eroded image
         import matplotlib.pyplot as plt
         fig = plt.figure(figsize=(16, 12))
         axs = fig.subplots(ncols=2, nrows=2)
@@ -85,6 +76,15 @@ def main(args):
         axs[1, 1].imshow(warped[..., [2, 1, 0]].cpu().numpy())
         fig.tight_layout(pad=5)
         plt.show()
+
+    if args.debug:  # speed test
+        import time
+        st = time.time()
+        for i in range(10):
+            warped = PRPA(target, reference)  # complete algorithm
+        torch.cuda.synchronize(torch.device("cuda"))
+        et = time.time()
+        print(f"Speed: {(et - st)/100}s")
 
 
 if __name__ == "__main__":
