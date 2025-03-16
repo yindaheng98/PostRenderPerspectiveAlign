@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import argparse
 import os
-from ppa import reconstruction, projection, render, warp
+from ppa import reconstruction, projection, render, warp, PRPA, Camera, Target, Reference
 from ppa.data import read_camera_color, read_camera_depth
 
 
@@ -65,7 +65,10 @@ def main(args):
         import time
         st = time.time()
         for i in range(10):
-            warped = warp(uv, color_ref, z)  # wrap it
+            warped = PRPA(
+                Target(K, R_c2w, T_c2w, depth),
+                Reference(K_r, R_r, t_r, color_ref),
+            )  # complete algorithm
         torch.cuda.synchronize(torch.device("cuda"))
         et = time.time()
         print((et - st)/100)
