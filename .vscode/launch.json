@@ -1,0 +1,22 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "warping",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "warping.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "--local",
+                "data/coffee_martini/00001",
+                "--reference",
+                "data/coffee_martini/00000",
+                "--warped",
+                "data/coffee_martini-warped/00001",
+                "--debug"
+            ]
+        },
+    ]
+}
