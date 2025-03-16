@@ -3,8 +3,8 @@ import numpy as np
 import torch
 import argparse
 import os
-from ppa import reconstruction, projection, render, warp, PRPA, Camera, Target, Reference
-from ppa.data import read_camera_color, read_camera_depth
+from prpa import reconstruction, projection, render, warp, PRPA, Target, Reference
+from prpa.data import read_camera_color, read_camera_depth
 
 
 parser = argparse.ArgumentParser()
@@ -25,7 +25,7 @@ def main(args):
     xyz = reconstruction(K, R_c2w, T_c2w, depth)  # xyz[uv on local rendered image] = pos in 3D space
 
     if args.debug:
-        from ppa.data import read_color
+        from prpa.data import read_color
         color = torch.tensor(read_color(idx_loc + ".png"))  # local rendered image
         assert color.shape[:2] == depth.shape, ValueError("Size of depth map should match color image")
         import open3d as o3d
