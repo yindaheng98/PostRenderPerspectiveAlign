@@ -3,8 +3,7 @@ import numpy as np
 import torch
 import argparse
 import os
-from prpa import reconstruction, projection, render, warp, PRPA, Target, Reference
-from prpa.data import read_camera_color, read_camera_depth
+from prpa import reconstruction, projection, render, warp, PRPA, Target, Reference, read_camera_color, read_camera_depth
 
 
 parser = argparse.ArgumentParser()
@@ -21,7 +20,8 @@ def main(args):
 
     # step 1: reconstruct 3D point cloud from local rendered image (image space `uv` to 3D space `xyz`)
     idx_loc = args.local  # local rendered image index
-    K, R_c2w, T_c2w, depth = read_camera_depth(idx_loc + ".camera.json", idx_loc + ".depth.npz")
+    target = read_camera_depth(idx_loc + ".camera.json", idx_loc + ".depth.npz")
+    K, R_c2w, T_c2w, depth = target.K, target.R, target.T, target.depth
     xyz = reconstruction(K, R_c2w, T_c2w, depth)  # xyz[uv on local rendered image] = pos in 3D space
 
     if args.debug:
@@ -37,7 +37,8 @@ def main(args):
 
     # step 2: project 3D point cloud to reference image (3D space `xyz` to image space `uv`)
     idx_ref = args.reference  # reference image index
-    K_r, R_r, t_r, color_ref = read_camera_color(idx_ref + ".camera.json", idx_ref + ".png")
+    reference = read_camera_color(idx_ref + ".camera.json", idx_ref + ".png")
+    K_r, R_r, t_r, color_ref = reference.K, reference.R, reference.T, reference.color
     uv, z = projection(K_r, R_r, t_r, xyz)  # uv[uv on local rendered image] = uv on reference
 
     # step 3: render image at local viewport according to projected `uv` and reference color (get color at `uv`)
@@ -65,13 +66,10 @@ def main(args):
         import time
         st = time.time()
         for i in range(10):
-            warped = PRPA(
-                Target(K, R_c2w, T_c2w, depth),
-                Reference(K_r, R_r, t_r, color_ref),
-            )  # complete algorithm
+            warped = PRPA(target, reference)  # complete algorithm
         torch.cuda.synchronize(torch.device("cuda"))
         et = time.time()
-        print((et - st)/100)
+        print(f"Speed: {(et - st)/100}s")
 
     if args.debug:
         import matplotlib.pyplot as plt
