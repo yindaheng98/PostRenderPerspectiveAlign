@@ -5,7 +5,7 @@
             "name": "warping",
             "type": "debugpy",
             "request": "launch",
-            "program": "warping.py",
+            "module": "prpa",
             "console": "integratedTerminal",
             "justMyCode": false,
             "args": [
