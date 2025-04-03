@@ -5,7 +5,7 @@ def count(uv, height, width):
     """Count on each pixel on reference image: how many point projected to this pixel?"""
     index = (uv[..., 1] * width + uv[..., 0]).reshape(-1)
     src = torch.ones_like(index)
-    counts = torch.zeros(height*width, dtype=src.dtype).scatter_add_(0, index, src)
+    counts = torch.zeros(height*width, dtype=src.dtype, device=src.device).scatter_add_(0, index, src)
     return counts.reshape(height, width)
 
 
@@ -13,7 +13,7 @@ def get_min_depth(uv, depth, height, width):
     """Count on each pixel: get min depth among all point projected to this pixel"""
     index = (uv[..., 1] * width + uv[..., 0]).reshape(-1)
     src = depth.reshape(-1)
-    min_depth = torch.zeros(height*width, dtype=depth.dtype).index_reduce_(0, index, src, 'amin', include_self=False)
+    min_depth = torch.zeros(height*width, dtype=depth.dtype, device=depth.device).index_reduce_(0, index, src, 'amin', include_self=False)
     return min_depth.reshape(height, width)
 
 
@@ -62,7 +62,7 @@ def is_occlusion(uv, depth, height, width):
 
     # 判定哪些点遮挡了其他点：1、在reference image上和被遮挡点重合；2、未被判定为被遮挡点
     pos_occluded_onref = uv[mask_occluded, ...]  # 所有在local rendered image上判定为被遮挡的点在reference image上的位置
-    mask_occluded_onref = torch.zeros(size=(height, width), dtype=torch.uint8).type(torch.bool)
+    mask_occluded_onref = torch.zeros(size=(height, width), dtype=torch.uint8, device=pos_occluded_onref.device).type(torch.bool)
     mask_occluded_onref[pos_occluded_onref[..., 1], pos_occluded_onref[..., 0]] = True  # 在reference image上标记上述位置
     mask_occlude = mask_occluded_onref[uv[..., 1], uv[..., 0]]  # 将在reference image上标记的位置再投影回local rendered image上
     mask_occlude &= ~mask_occluded  # 未被判定为被遮挡点
