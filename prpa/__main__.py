@@ -11,6 +11,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--local", type=str, required=True, help="Index of locally rendered image.")
 parser.add_argument("--reference", type=str, required=True, help="Index of reference image.")
 parser.add_argument("--warped", type=str, required=True, help="Index to save warped image.")
+parser.add_argument("--bordermode", type=str, default='grid_sample')
 parser.add_argument("--debug", action="store_true")
 
 
@@ -43,7 +44,7 @@ def main(args):
     uv, z = projection(K_r, R_r, t_r, xyz)  # uv[uv on local rendered image] = uv on reference
 
     # step 3: render image at local viewport according to projected `uv` and reference color (get color at `uv`)
-    rendered = render(uv, color_ref)  # wrap it
+    rendered = render(uv, color_ref, bordermode=args.bordermode)  # wrap it
     cv2.imwrite(args.warped + ".no_error_erosion.png", rendered.cpu().numpy())  # debug
 
     if args.debug:  # show rendered image
@@ -60,7 +61,7 @@ def main(args):
         plt.show()
 
     # step 3: error erosion
-    warped = warp(uv, color_ref, z)  # wrap = render + error erosion
+    warped = warp(uv, color_ref, z, bordermode=args.bordermode)  # wrap = render + error erosion
     cv2.imwrite(args.warped + ".png", warped.cpu().numpy())  # debug
 
     if args.debug:  # show error-eroded image
@@ -82,7 +83,7 @@ def main(args):
         import time
         st = time.time()
         for i in range(10):
-            warped = PRPA(target, reference)  # complete algorithm
+            warped = PRPA(target, reference, bordermode=args.bordermode)  # complete algorithm
         torch.cuda.synchronize(torch.device("cuda"))
         et = time.time()
         print(f"Speed: {(et - st)/100}s")

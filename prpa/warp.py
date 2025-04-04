@@ -5,7 +5,7 @@ from .morph import MorphologyClose
 from .erosion import error_erosion
 
 
-def warp(uv, color_ref, depth):
+def warp(uv, color_ref, depth, bordermode='grid_sample'):
     height, width = color_ref.shape[:2]
     uv_idx = uv[..., :2]
     uv_idx = uv_idx.round().type(torch.int64)
@@ -15,13 +15,12 @@ def warp(uv, color_ref, depth):
     # is_edge |= uv_idx[..., 1] >= width
     uv_idx[..., 1].clamp_(0, height-1)
     uv_idx[..., 0].clamp_(0, width-1)
-    warped = color_ref[uv_idx[..., 1], uv_idx[..., 0], ...]
-    """
-    # done by grid_sample, same result, may be faster?
-    grid = uv[..., :2] / torch.tensor([[[width, height]]]) * 2 - 1
-    warped = F.grid_sample(color_ref.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
-                           mode='bilinear', align_corners=True)[0, ...].type(torch.uint8).permute(1, 2, 0)
-    """
+    if bordermode != 'grid_sample':
+        warped = color_ref[uv_idx[..., 1], uv_idx[..., 0], ...]
+    else:
+        grid = uv[..., :2] / torch.tensor([[[width, height]]], device=uv.device) * 2 - 1
+        warped = F.grid_sample(color_ref.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
+                               mode='bilinear', align_corners=True)[0, ...].type(torch.uint8).permute(1, 2, 0)
 
     # warped = torch.zeros_like(color_ref)  # inverse
     # warped[uv_idx[..., 1], uv_idx[..., 0], ...] = color_ref  # inverse

@@ -15,6 +15,7 @@
                 "data/coffee_martini/00000",
                 "--warped",
                 "data/coffee_martini-warped/00001",
+                // "--bordermode=none",
                 "--debug"
             ]
         },
