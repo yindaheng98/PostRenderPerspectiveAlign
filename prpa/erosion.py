@@ -15,8 +15,8 @@ def error_erosion(warped, mask_occluded, mask_occlude, kernel_size=5, occluded_d
 
     # get kernel for fixing warping error
     kernel = torch.cartesian_prod(
-        torch.arange(-kernel_size, kernel_size+1, dtype=torch.int64),
-        torch.arange(-kernel_size, kernel_size+1, dtype=torch.int64))
+        torch.arange(-kernel_size, kernel_size+1, dtype=torch.int64, device=edge_pos.device),
+        torch.arange(-kernel_size, kernel_size+1, dtype=torch.int64, device=edge_pos.device))
     kernels = edge_pos.unsqueeze(1) + kernel.unsqueeze(0)  # region to be erosion
     kernels[..., 0].clamp_(0, height-1)
     kernels[..., 1].clamp_(0, width-1)
