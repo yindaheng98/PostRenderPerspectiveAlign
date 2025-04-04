@@ -23,6 +23,6 @@ def render(uv, color_ref, bordermode='grid_sample'):
         warped = color_ref[uv_idx[..., 1], uv_idx[..., 0], ...]
     else:
         grid = uv[..., :2] / torch.tensor([[[width, height]]], device=uv.device) * 2 - 1
-        warped = F.grid_sample(color_ref.permute(2, 0, 1).unsqueeze(0).type(torch.float32), grid.unsqueeze(0),
-                               mode='bilinear', align_corners=True)[0, ...].type(torch.uint8).permute(1, 2, 0)
+        warped = F.grid_sample(color_ref.float().permute(2, 0, 1).unsqueeze(0), grid.unsqueeze(0),
+                               mode='bilinear', align_corners=True)[0, ...].permute(1, 2, 0).type(color_ref.dtype)
     return warped
