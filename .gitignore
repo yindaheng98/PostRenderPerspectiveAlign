@@ -1,8 +1,12 @@
-data/*
-!data/coffee_martini
-data/coffee_martini/*
-!data/coffee_martini/00000.*
-!data/coffee_martini/00001.*
+data
+output
+*.dist-info
+testdata/*
+!testdata/00000.*
+!testdata/00001.*
+!testdata/00009.*
+!testdata/00017.*
+/gaussian_splatting
 # Created by https://www.toptal.com/developers/gitignore/api/python
 # Edit at https://www.toptal.com/developers/gitignore?templates=python
 

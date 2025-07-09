@@ -2,6 +2,24 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "render",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "render.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "-s",
+                "data/flame_salmon_1/frame1",
+                "-d",
+                "output/flame_salmon_1/frame1",
+                "-t",
+                "testdata",
+                "-i",
+                "10000",
+            ]
+        },
+        {
             "name": "warping",
             "type": "debugpy",
             "request": "launch",
@@ -10,11 +28,11 @@
             "justMyCode": false,
             "args": [
                 "--local",
-                "data/coffee_martini/00001",
+                "testdata/00001",
                 "--reference",
-                "data/coffee_martini/00000",
+                "testdata/00000",
                 "--warped",
-                "data/coffee_martini-warped/00001",
+                "testdata/warped/00001",
                 // "--bordermode=none",
                 "--debug"
             ]
