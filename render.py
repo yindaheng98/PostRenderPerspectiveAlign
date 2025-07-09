@@ -5,6 +5,8 @@ from tqdm import tqdm
 from os import makedirs
 import torchvision
 import numpy as np
+from matplotlib import colors
+from matplotlib import colormaps
 from gaussian_splatting import GaussianModel
 from gaussian_splatting.camera import camera2dict, dict2camera
 from gaussian_splatting.dataset import CameraDataset
@@ -25,6 +27,18 @@ def convert_dataset(dataset: CameraDataset, fix_width, fix_height, fix_width_foc
     return sorted(camera_dicts, key=lambda camera: camera["ground_truth_image_path"])
 
 
+def colorify_depth(depth: torch.Tensor) -> torch.Tensor:
+    device = depth.device
+    shape = depth.shape[1:]
+    depth = depth.reshape(-1).cpu().numpy()
+    dsort = np.sort(depth)
+    dmin, dmax = dsort[int(depth.shape[0]*0.025)], dsort[int(depth.shape[0]*0.975)]
+    norm = colors.Normalize(vmin=dmin, vmax=dmax, clip=True)
+    cmap = colormaps.get_cmap("viridis")
+    rgba = cmap(norm(depth))
+    return torch.from_numpy(rgba[..., :3]).to(device).reshape(*shape, 3).permute(2, 0, 1).contiguous().float()
+
+
 def rendering(dataset: CameraDataset, gaussians: GaussianModel, render_path: str, fix_width, fix_height, fix_width_focal, fix_height_focal) -> None:
     makedirs(render_path, exist_ok=True)
     camera_dicts = convert_dataset(dataset, fix_width, fix_height, fix_width_focal, fix_height_focal)
@@ -39,6 +53,7 @@ def rendering(dataset: CameraDataset, gaussians: GaussianModel, render_path: str
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
         depth = 1 / out["depth"]
         np.savez_compressed(os.path.join(render_path, '{0:05d}'.format(idx) + ".depth.npz"), depth=depth.type(torch.float16).cpu().numpy())
+        torchvision.utils.save_image(colorify_depth(depth), os.path.join(render_path, '{0:05d}'.format(idx) + ".depth.png"))
         with open(os.path.join(render_path, '{0:05d}'.format(idx) + ".camera.json"), "w") as f:
             json.dump(camera2dict(camera, idx), f, indent=2)
 
