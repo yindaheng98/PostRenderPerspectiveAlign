@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prpa"
+version = "1.2.2"
+description = "Post-Render Perspective Align"
+readme = "README.md"
+authors = [{ name = "yindaheng98", email = "yindaheng98@gmail.com" }]
+classifiers = ["Programming Language :: Python :: 3"]
+urls = { Homepage = "https://github.com/yindaheng98/PostRenderPerspectiveAlign" }
+requires-python = ">=3"
+
+[project.optional-dependencies]
+data = ["opencv-python", "numpy", "open3d"]
+render = ["gaussian-splatting"]
+
+# --- Setuptools-specific tables ---------------------------------------------
+
+[tool.setuptools]
+# Auto-discover all packages that start with one of the given globs
+# (‘*’ is a wildcard, so both direct and nested modules are picked up)
+packages = { find = { include = ["prpa*"] } }
+
+# Keep the conventional “flat” layout (sources live beside pyproject.toml)
+[tool.setuptools.package-dir]
+"" = "."
