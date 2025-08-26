@@ -2,7 +2,7 @@ import torch
 from .morph import MorphologyDilation
 
 
-def error_erosion(warped, mask_occluded, mask_occlude, kernel_size=5, occluded_dilation_size=0, occlude_dilation_size=0):
+def error_erosion(warped, mask_occluded, mask_occlude, mask_occlude_dilated, kernel_size=5, occluded_dilation_size=0):
     assert mask_occluded.dim() == mask_occlude.dim() == 2
     assert mask_occluded.shape == mask_occlude.shape
     height, width = mask_occluded.shape
@@ -34,9 +34,6 @@ def error_erosion(warped, mask_occluded, mask_occlude, kernel_size=5, occluded_d
     mask_occluded_dilated = mask_occluded
     if occluded_dilation_size > 0:
         mask_occluded_dilated = MorphologyDilation(mask_occluded, kernel_size=occluded_dilation_size)
-    mask_occlude_dilated = mask_occlude
-    if occlude_dilation_size > 0:
-        mask_occlude_dilated = MorphologyDilation(mask_occlude, kernel_size=occlude_dilation_size)
     kernel_avgcolormask = ~mask_occluded_dilated[kernels[..., 0], kernels[..., 1]]  # no use color in occluded region
     kernel_avgcolormask &= ~mask_occlude_dilated[kernels[..., 0], kernels[..., 1]]  # no use color in occlude region
     # avgcolor_pos = kernels[kernel_avgcolormask, ...]  # debug

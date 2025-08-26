@@ -101,7 +101,7 @@ def error_erosion_kernel(
                     ti.atomic_add(counter[0], 1)
 
 
-def error_erosion(warped, mask_occluded, mask_occlude, kernel_size=5, occluded_dilation_size=0, occlude_dilation_size=0):
+def error_erosion(warped, mask_occluded, mask_occlude, mask_occlude_dilated, kernel_size=5, occluded_dilation_size=0):
     assert warped.dim() == 3
     assert warped.shape[2] <= MAX_CHANNELS
     assert mask_occluded.dim() == mask_occlude.dim() == 2
@@ -121,9 +121,6 @@ def error_erosion(warped, mask_occluded, mask_occlude, kernel_size=5, occluded_d
     mask_occluded_dilated = mask_occluded
     if occluded_dilation_size > 0:
         mask_occluded_dilated = MorphologyDilation(mask_occluded, kernel_size=occluded_dilation_size)
-    mask_occlude_dilated = mask_occlude
-    if occlude_dilation_size > 0:
-        mask_occlude_dilated = MorphologyDilation(mask_occlude, kernel_size=occlude_dilation_size)
 
     edge_pos = edge_pos.to(torch.int32).contiguous()
     warped_out = warped if warped.is_contiguous() else warped.contiguous()

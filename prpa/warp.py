@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 from .occlusion import is_occlusion
-from .morph import MorphologyClose
+from .morph import MorphologyClose, MorphologyDilation
 from .erosion import error_erosion
 
 
@@ -46,27 +46,28 @@ def warp(uv, color_ref, depth, bordermode='grid_sample'):
 
     # mask_occluded_last = mask_occluded.clone()  # debug
     kernel_size, occluded_dilation_size, occlude_dilation_size = 8, 5, 5
+    mask_occlude_dilated = MorphologyDilation(mask_occlude, kernel_size=occlude_dilation_size)
     warped, mask_occluded, validcount = error_erosion(
-        warped, mask_occluded, mask_occlude,
+        warped, mask_occluded, mask_occlude, mask_occlude_dilated,
         kernel_size=kernel_size,
-        occluded_dilation_size=occluded_dilation_size,
-        occlude_dilation_size=occlude_dilation_size)
+        occluded_dilation_size=occluded_dilation_size)
     # print(validcount, mask_occluded.sum())  # debug
     while mask_occluded.sum() > 0 and validcount > 0:
         warped, mask_occluded, validcount = error_erosion(
-            warped, mask_occluded, mask_occlude,
+            warped, mask_occluded, mask_occlude, mask_occlude_dilated,
             kernel_size=kernel_size,
-            occluded_dilation_size=occluded_dilation_size,
-            occlude_dilation_size=occlude_dilation_size)
+            occluded_dilation_size=occluded_dilation_size)
         # print(validcount, mask_occluded.sum())  # debug
         if validcount <= 0:
             occluded_dilation_size -= 1
             occlude_dilation_size -= 1
+            mask_occlude_dilated = mask_occlude
+            if occlude_dilation_size > 0:
+                mask_occlude_dilated = MorphologyDilation(mask_occlude, kernel_size=occlude_dilation_size)
             warped, mask_occluded, validcount = error_erosion(
-                warped, mask_occluded, mask_occlude,
+                warped, mask_occluded, mask_occlude, mask_occlude_dilated,
                 kernel_size=kernel_size,
-                occluded_dilation_size=occluded_dilation_size,
-                occlude_dilation_size=occlude_dilation_size)
+                occluded_dilation_size=occluded_dilation_size)
         # print(validcount, mask_occluded.sum())  # debug
     # warped[mask_occluded_last, :] = torch.tensor([255, 0, 0], dtype=warped.dtype)  # debug
     # warped[mask_occluded, :] = torch.tensor([0, 255, 0], dtype=warped.dtype)  # debug
