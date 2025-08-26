@@ -17,7 +17,7 @@ def set_backend(backend='torch', **ti_init_kwargs):
         error_erosion = _impl
 
 
-def warp(uv, color_ref, depth, bordermode='grid_sample'):
+def warp(uv, color_ref, depth, bordermode='grid_sample', kernel_size=16, occluded_dilation_size=1, occlude_dilation_size=1):
     height, width = color_ref.shape[:2]
     uv_idx = uv[..., :2]
     uv_idx = uv_idx.round().type(torch.int64)
@@ -45,7 +45,6 @@ def warp(uv, color_ref, depth, bordermode='grid_sample'):
     # return warped
 
     # mask_occluded_last = mask_occluded.clone()  # debug
-    kernel_size, occluded_dilation_size, occlude_dilation_size = 8, 5, 5
     mask_occlude_dilated = MorphologyDilation(mask_occlude, kernel_size=occlude_dilation_size)
     warped, mask_occluded, validcount = error_erosion(
         warped, mask_occluded, mask_occlude, mask_occlude_dilated,

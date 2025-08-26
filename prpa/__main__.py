@@ -14,6 +14,9 @@ parser.add_argument("--reference", type=str, required=True, help="Index of refer
 parser.add_argument("--warped", type=str, required=True, help="Index to save warped image.")
 parser.add_argument("--bordermode", type=str, default='grid_sample')
 parser.add_argument("--backend", type=str, default='taichi', choices=['torch', 'taichi'])
+parser.add_argument("--kernel-size", type=int, default=16, help="Erosion sliding window radius.")
+parser.add_argument("--occluded-dilation-size", type=int, default=1, help="Dilation size for occluded mask when selecting source pixels.")
+parser.add_argument("--occlude-dilation-size", type=int, default=1, help="Dilation size for occlude mask when selecting source pixels.")
 parser.add_argument("--debug", action="store_true")
 
 
@@ -63,7 +66,10 @@ def main(args):
         plt.show()
 
     # step 3: error erosion
-    warped = warp(uv, color_ref, z, bordermode=args.bordermode)  # wrap = render + error erosion
+    warped = warp(uv, color_ref, z, bordermode=args.bordermode,
+                  kernel_size=args.kernel_size,
+                  occluded_dilation_size=args.occluded_dilation_size,
+                  occlude_dilation_size=args.occlude_dilation_size)  # wrap = render + error erosion
     cv2.imwrite(args.warped + ".png", warped.cpu().numpy())  # debug
 
     if args.debug:  # show error-eroded image
@@ -85,10 +91,14 @@ def main(args):
         import time
         st = time.time()
         for i in range(10):
-            warped = PRPA(target, reference, bordermode=args.bordermode)  # complete algorithm
+            warped = PRPA(
+                target, reference, bordermode=args.bordermode,
+                kernel_size=args.kernel_size,
+                occluded_dilation_size=args.occluded_dilation_size,
+                occlude_dilation_size=args.occlude_dilation_size)  # complete algorithm
         torch.cuda.synchronize(torch.device("cuda"))
         et = time.time()
-        print(f"Speed: {(et - st)/100}s")
+        print(f"Speed: {(et - st)/10}s")
 
 
 if __name__ == "__main__":
