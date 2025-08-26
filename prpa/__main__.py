@@ -4,7 +4,7 @@ import torch
 import argparse
 import os
 from prpa import reconstruction, projection, render, warp, PRPA
-from prpa.warp import set_backend
+from prpa.prpa import set_backend
 from prpa.data import read_camera_color, read_camera_depth
 
 

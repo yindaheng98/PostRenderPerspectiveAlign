@@ -4,6 +4,18 @@ from .reproj import reprojection
 from .warp import warp
 
 
+def set_backend(backend='torch', **ti_init_kwargs):
+    global reprojection
+    from .warp import set_backend as set_warp_backend
+    set_warp_backend(backend, **ti_init_kwargs)
+    if backend == 'taichi':
+        from .kernel.taichi.reproj import reprojection as _impl
+        reprojection = _impl
+    else:
+        from .reproj import reprojection as _impl
+        reprojection = _impl
+
+
 class Camera(NamedTuple):
     K: torch.Tensor
     R: torch.Tensor
