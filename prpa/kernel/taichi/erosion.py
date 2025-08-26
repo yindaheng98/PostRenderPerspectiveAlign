@@ -1,8 +1,109 @@
+import taichi as ti
 import torch
 from .morph import MorphologyDilation
 
+MAX_CHANNELS = 4
+
+
+@ti.func
+def clamp_index(index: ti.i32, upper: ti.i32) -> ti.i32:
+    return ti.min(ti.max(index, 0), upper - 1)
+
+
+@ti.kernel
+def error_erosion_kernel(
+    edge_pos: ti.types.ndarray(dtype=ti.i32, ndim=2),
+    warped: ti.types.ndarray(dtype=ti.u8, ndim=3),
+    mask_occluded: ti.types.ndarray(dtype=ti.u8, ndim=2),
+    mask_occlude: ti.types.ndarray(dtype=ti.u8, ndim=2),
+    mask_occluded_dilated: ti.types.ndarray(dtype=ti.u8, ndim=2),
+    mask_occlude_dilated: ti.types.ndarray(dtype=ti.u8, ndim=2),
+    mask_occluded_out: ti.types.ndarray(dtype=ti.u8, ndim=2),
+    counter: ti.types.ndarray(dtype=ti.i32, ndim=1),
+    height: ti.i32,
+    width: ti.i32,
+    channels: ti.i32,
+    kernel_size: ti.i32,
+):
+    ti.loop_config(block_dim=256)
+    for edge_idx in range(edge_pos.shape[0]):
+        center_y = edge_pos[edge_idx, 0]  # kernel center y
+        center_x = edge_pos[edge_idx, 1]  # kernel center x
+
+        # Phase 1: Reduce - compute average color from source pixels
+        validcolorcount = 0
+        color_sum = ti.Vector.zero(ti.f32, MAX_CHANNELS)
+
+        for dy in range(-kernel_size, kernel_size + 1):
+            y = clamp_index(center_y + dy, height)
+            for dx in range(-kernel_size, kernel_size + 1):
+                x = clamp_index(center_x + dx, width)
+
+                # Now (x,y) is one of the kernels[edge_idx, ...]:
+                # kernel = torch.cartesian_prod(
+                #     torch.arange(-kernel_size, kernel_size+1, dtype=torch.int64, device=edge_pos.device),
+                #     torch.arange(-kernel_size, kernel_size+1, dtype=torch.int64, device=edge_pos.device))
+                # kernels = edge_pos.unsqueeze(1) + kernel.unsqueeze(0)  # region to be erosion
+                # kernels[..., 0].clamp_(0, height-1)
+                # kernels[..., 1].clamp_(0, width-1)
+
+                if mask_occluded_dilated[y, x] == 0 and mask_occlude_dilated[y, x] == 0:
+                    # Now (x,y) is one of the pixels inside the kernel_avgcolormask:
+                    # kernel_avgcolormask = ~mask_occluded_dilated[kernels[..., 0], kernels[..., 1]]
+                    # kernel_avgcolormask &= ~mask_occlude_dilated[kernels[..., 0], kernels[..., 1]]
+
+                    validcolorcount += 1  # kernel_validcolorcount = kernel_avgcolormask.sum(dim=1)
+
+                    # Now collecting and sum kernel_colors to compute kernel_avgcolor:
+                    # kernel_colors = warped[kernels[..., 0], kernels[..., 1]].type(torch.float32)
+                    # kernel_colors[~kernel_avgcolormask, ...] = 0.
+                    # kernel_avgcolor = (kernel_colors.sum(dim=1) / kernel_validcolorcount.unsqueeze(-1)).type(warped.dtype)
+                    for channel in ti.static(range(MAX_CHANNELS)):
+                        if channel < channels:
+                            color_sum[channel] += ti.cast(warped[y, x, channel], ti.f32)
+
+        if validcolorcount <= 0:
+            continue
+
+        # Now (center_y, center_x) is one of the kernel centers inside the kernel_valid:
+        # kernel_validcolorcount = (kernel_avgcolormask).sum(dim=1)
+        # kernel_valid = kernel_validcolorcount > 0
+        # kernels = kernels[kernel_valid, ...]
+
+        # Now computing kernel_avgcolor:
+        # kernel_avgcolor = (kernel_colors.sum(dim=1) / kernel_validcolorcount.unsqueeze(-1)).type(warped.dtype)
+        color_avg = ti.Vector.zero(ti.f32, MAX_CHANNELS)
+        for channel in ti.static(range(MAX_CHANNELS)):
+            if channel < channels:
+                color_avg[channel] = ti.cast(color_sum[channel] / validcolorcount, ti.u8)
+
+        # Phase 2: Scatter - write average color to target pixels
+        for dy in range(-kernel_size, kernel_size + 1):
+            y = clamp_index(center_y + dy, height)
+            for dx in range(-kernel_size, kernel_size + 1):
+                x = clamp_index(center_x + dx, width)
+                if mask_occluded[y, x] != 0 and mask_occlude[y, x] == 0:
+                    # Now (x,y) is one of the pixels inside the kernel_assignmask:
+                    # kernel_assignmask = mask_occluded[kernels[..., 0], kernels[..., 1]]
+                    # kernel_assignmask &= ~mask_occlude[kernels[..., 0], kernels[..., 1]]
+                    # kernel_assignmask = kernel_assignmask[kernel_valid, ...]
+                    # also, (x,y) is one of the pos in the assign_pos:
+                    # assign_pos = kernels[kernel_assignmask, ...]
+
+                    for channel in ti.static(range(MAX_CHANNELS)):
+                        if channel < channels:
+                            # Now assigning color_avg to (x,y):
+                            # warped[assign_pos[..., 0], assign_pos[..., 1], ...] = kernel_assigncolor
+                            warped[y, x, channel] = color_avg[channel]
+                    # Now clearing mask_occluded[y, x]:
+                    # mask_occluded[assign_pos[..., 0], assign_pos[..., 1]] = False
+                    mask_occluded_out[y, x] = 0
+                    ti.atomic_add(counter[0], 1)
+
 
 def error_erosion(warped, mask_occluded, mask_occlude, kernel_size=5, occluded_dilation_size=0, occlude_dilation_size=0):
+    assert warped.dim() == 3
+    assert warped.shape[2] <= MAX_CHANNELS
     assert mask_occluded.dim() == mask_occlude.dim() == 2
     assert mask_occluded.shape == mask_occlude.shape
     height, width = mask_occluded.shape
@@ -13,22 +114,8 @@ def error_erosion(warped, mask_occluded, mask_occlude, kernel_size=5, occluded_d
     # warped[edge_pos[..., 0], edge_pos[..., 1], ...] = torch.tensor([0, 0, 255], dtype=torch.uint8)  # debug
     # return warped, mask_occluded  # debug
 
-    # get kernel for fixing warping error
-    kernel = torch.cartesian_prod(
-        torch.arange(-kernel_size, kernel_size+1, dtype=torch.int64, device=edge_pos.device),
-        torch.arange(-kernel_size, kernel_size+1, dtype=torch.int64, device=edge_pos.device))
-    kernels = edge_pos.unsqueeze(1) + kernel.unsqueeze(0)  # region to be erosion
-    kernels[..., 0].clamp_(0, height-1)
-    kernels[..., 1].clamp_(0, width-1)
-    # warped[kernels[..., 0], kernels[..., 1], ...] = torch.tensor([0, 0, 255], dtype=torch.uint8)  # debug
-    # return warped, mask_occluded  # debug
-
-    # where to assign color
-    kernel_assignmask = mask_occluded[kernels[..., 0], kernels[..., 1]]  # only assign color to occluded region
-    kernel_assignmask &= ~mask_occlude[kernels[..., 0], kernels[..., 1]]  # donot assign color in occlude region
-    # assign_pos = kernels[kernel_assignmask, ...]  # debug
-    # warped[assign_pos[..., 0], assign_pos[..., 1], ...] = torch.tensor([0, 0, 255], dtype=torch.uint8)  # debug
-    # return warped, mask_occluded  # debug
+    if len(edge_pos) <= 0:
+        return warped, mask_occluded, 0
 
     # where to collect color for avg
     mask_occluded_dilated = mask_occluded
@@ -37,40 +124,27 @@ def error_erosion(warped, mask_occluded, mask_occlude, kernel_size=5, occluded_d
     mask_occlude_dilated = mask_occlude
     if occlude_dilation_size > 0:
         mask_occlude_dilated = MorphologyDilation(mask_occlude, kernel_size=occlude_dilation_size)
-    kernel_avgcolormask = ~mask_occluded_dilated[kernels[..., 0], kernels[..., 1]]  # no use color in occluded region
-    kernel_avgcolormask &= ~mask_occlude_dilated[kernels[..., 0], kernels[..., 1]]  # no use color in occlude region
-    # avgcolor_pos = kernels[kernel_avgcolormask, ...]  # debug
-    # warped[avgcolor_pos[..., 0], avgcolor_pos[..., 1], ...] = torch.tensor([0, 255, 0], dtype=torch.uint8)  # debug
-    # return warped, mask_occluded  # debug
 
-    # delete those kernel that do not have color for avg
-    kernel_validcolorcount = (kernel_avgcolormask).sum(dim=1)
-    kernel_valid = kernel_validcolorcount > 0
-    kernels = kernels[kernel_valid, ...]
-    # warped[kernels[..., 0], kernels[..., 1], ...] = torch.tensor([0, 0, 255], dtype=torch.uint8)  # debug
-    # return warped, mask_occluded  # debug
-    if len(kernels) <= 0:
-        return warped, mask_occluded, 0
-    kernel_assignmask = kernel_assignmask[kernel_valid, ...]
-    # assign_pos = kernels[kernel_assignmask, ...]  # debug
-    # warped[assign_pos[..., 0], assign_pos[..., 1], ...] = torch.tensor([0, 0, 255], dtype=torch.uint8)  # debug
-    # return warped, mask_occluded  # debug
-    kernel_avgcolormask = kernel_avgcolormask[kernel_valid, ...]
-    # avgcolor_pos = kernels[kernel_avgcolormask, ...]  # debug
-    # warped[avgcolor_pos[..., 0], avgcolor_pos[..., 1], ...] = torch.tensor([0, 255, 0], dtype=torch.uint8)  # debug
-    # return warped, mask_occluded  # debug
-    kernel_validcolorcount = kernel_validcolorcount[kernel_valid]
+    edge_pos = edge_pos.to(torch.int32).contiguous()
+    warped_out = warped if warped.is_contiguous() else warped.contiguous()
+    mask_occluded_u8 = mask_occluded.to(torch.uint8).contiguous()
+    mask_occluded_out = mask_occluded_u8.clone()
+    mask_occlude_u8 = mask_occlude.to(torch.uint8).contiguous()
+    mask_occluded_dilated_u8 = mask_occluded_dilated.to(torch.uint8).contiguous()
+    mask_occlude_dilated_u8 = mask_occlude_dilated.to(torch.uint8).contiguous()
+    counter = torch.zeros(1, device=warped.device, dtype=torch.int32)
 
-    # collect and compute avg color in the kernel
-    kernel_colors = warped[kernels[..., 0], kernels[..., 1]].type(torch.float32)
-    kernel_colors[~kernel_avgcolormask, ...] = 0.
-    kernel_avgcolor = (kernel_colors.sum(dim=1) / kernel_validcolorcount.unsqueeze(-1)).type(warped.dtype)
-    kernel_assigncolor = kernel_avgcolor.unsqueeze(1).expand(-1, kernels.shape[1], -1)[kernel_assignmask, ...]
+    error_erosion_kernel(
+        edge_pos, warped_out,
+        mask_occluded_u8, mask_occlude_u8,
+        mask_occluded_dilated_u8, mask_occlude_dilated_u8,
+        mask_occluded_out,
+        counter, height, width, warped.shape[2], kernel_size,
+    )
 
-    # assign avg color in the kernel
-    assign_pos = kernels[kernel_assignmask, ...]
-    if len(assign_pos) <= 0:
-        return warped, mask_occluded, 0
-    warped[assign_pos[..., 0], assign_pos[..., 1], ...] = kernel_assigncolor
-    mask_occluded[assign_pos[..., 0], assign_pos[..., 1]] = False
-    return warped, mask_occluded, len(assign_pos)
+    validcount = int(counter.item())
+    if validcount > 0:
+        if warped_out is not warped:
+            warped.copy_(warped_out)
+        mask_occluded.copy_(mask_occluded_out.bool())
+    return warped, mask_occluded, validcount
