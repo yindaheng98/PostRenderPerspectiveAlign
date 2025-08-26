@@ -17,7 +17,7 @@ def set_backend(backend='torch', **ti_init_kwargs):
         error_erosion = _impl
 
 
-def warp(uv, color_ref, depth, bordermode='grid_sample', kernel_size=16, occluded_dilation_size=1, occlude_dilation_size=1):
+def warp(uv, color_ref, depth, bordermode='grid_sample', kernel_size=16, occluded_dilation_size=1, occlude_dilation_size=1, max_iterations=None):
     height, width = color_ref.shape[:2]
     uv_idx = uv[..., :2]
     uv_idx = uv_idx.round().type(torch.int64)
@@ -51,7 +51,9 @@ def warp(uv, color_ref, depth, bordermode='grid_sample', kernel_size=16, occlude
         kernel_size=kernel_size,
         occluded_dilation_size=occluded_dilation_size)
     # print(validcount, mask_occluded.sum())  # debug
-    while mask_occluded.sum() > 0 and validcount > 0:
+    iteration = 0
+    while mask_occluded.sum() > 0 and validcount > 0 and (max_iterations is None or iteration < max_iterations):
+        iteration += 1
         warped, mask_occluded, validcount = error_erosion(
             warped, mask_occluded, mask_occlude, mask_occlude_dilated,
             kernel_size=kernel_size,

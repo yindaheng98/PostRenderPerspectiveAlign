@@ -29,7 +29,7 @@ class Reference(Camera):
         return self
 
 
-def PRPA(target: Target, reference: Reference, bordermode='grid_sample', kernel_size=16, occluded_dilation_size=1, occlude_dilation_size=1):
+def PRPA(target: Target, reference: Reference, bordermode='grid_sample', kernel_size=16, occluded_dilation_size=1, occlude_dilation_size=1, max_iterations=None):
     # step 1: reconstruct 3D point cloud from local rendered image (image space `uv` to 3D space `xyz`)
     K, R_c2w, T_c2w, depth = target.K, target.R, target.T, target.depth
     xyz = reconstruction(K, R_c2w, T_c2w, depth)  # xyz[uv on local rendered image] = pos in 3D space
@@ -43,6 +43,7 @@ def PRPA(target: Target, reference: Reference, bordermode='grid_sample', kernel_
         uv, color_ref, z, bordermode=bordermode,
         kernel_size=kernel_size,
         occluded_dilation_size=occluded_dilation_size,
-        occlude_dilation_size=occlude_dilation_size)  # wrap = render + error erosion
+        occlude_dilation_size=occlude_dilation_size,
+        max_iterations=max_iterations)  # wrap = render + error erosion
 
     return warped

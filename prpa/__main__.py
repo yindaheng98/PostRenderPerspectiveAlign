@@ -17,6 +17,7 @@ parser.add_argument("--backend", type=str, default='taichi', choices=['torch', '
 parser.add_argument("--kernel-size", type=int, default=16, help="Erosion sliding window radius.")
 parser.add_argument("--occluded-dilation-size", type=int, default=1, help="Dilation size for occluded mask when selecting source pixels.")
 parser.add_argument("--occlude-dilation-size", type=int, default=1, help="Dilation size for occlude mask when selecting source pixels.")
+parser.add_argument("--max-iterations", type=int, default=None, help="Max iterations for the error erosion loop. Default: None (unlimited).")
 parser.add_argument("--debug", action="store_true")
 
 
@@ -69,7 +70,8 @@ def main(args):
     warped = warp(uv, color_ref, z, bordermode=args.bordermode,
                   kernel_size=args.kernel_size,
                   occluded_dilation_size=args.occluded_dilation_size,
-                  occlude_dilation_size=args.occlude_dilation_size)  # wrap = render + error erosion
+                  occlude_dilation_size=args.occlude_dilation_size,
+                  max_iterations=args.max_iterations)  # wrap = render + error erosion
     cv2.imwrite(args.warped + ".png", warped.cpu().numpy())  # debug
 
     if args.debug:  # show error-eroded image
@@ -94,7 +96,8 @@ def main(args):
                 target, reference, bordermode=args.bordermode,
                 kernel_size=args.kernel_size,
                 occluded_dilation_size=args.occluded_dilation_size,
-                occlude_dilation_size=args.occlude_dilation_size)
+                occlude_dilation_size=args.occlude_dilation_size,
+                max_iterations=args.max_iterations)
         torch.cuda.synchronize(torch.device("cuda"))
 
         st = time.time()
@@ -103,7 +106,8 @@ def main(args):
                 target, reference, bordermode=args.bordermode,
                 kernel_size=args.kernel_size,
                 occluded_dilation_size=args.occluded_dilation_size,
-                occlude_dilation_size=args.occlude_dilation_size)  # complete algorithm
+                occlude_dilation_size=args.occlude_dilation_size,
+                max_iterations=args.max_iterations)  # complete algorithm
         torch.cuda.synchronize(torch.device("cuda"))
         et = time.time()
         print(f"Speed: {(et - st)/10}s")
