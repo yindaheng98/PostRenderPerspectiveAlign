@@ -89,6 +89,14 @@ def main(args):
 
     if args.debug:  # speed test
         import time
+        for _ in range(2):
+            warped = PRPA(
+                target, reference, bordermode=args.bordermode,
+                kernel_size=args.kernel_size,
+                occluded_dilation_size=args.occluded_dilation_size,
+                occlude_dilation_size=args.occlude_dilation_size)
+        torch.cuda.synchronize(torch.device("cuda"))
+
         st = time.time()
         for i in range(10):
             warped = PRPA(
