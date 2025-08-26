@@ -34,6 +34,12 @@
                 "--warped",
                 "testdata/warped/00001",
                 // "--bordermode=none",
+                // "--backend",
+                // "torch",
+                // "--kernel-size",
+                // "1",
+                // "--max-iterations",
+                // "0",
                 "--debug"
             ]
         },
