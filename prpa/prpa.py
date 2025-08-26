@@ -6,9 +6,16 @@ from .warp import warp
 
 def set_backend(backend='torch', **ti_init_kwargs):
     from .warp import set_backend as set_warp_backend
-    from .query import set_backend as set_query_backend
     set_warp_backend(backend, **ti_init_kwargs)
-    set_query_backend(backend, **ti_init_kwargs)
+    global query
+    if backend == 'taichi':
+        import taichi as ti
+        ti.init(**ti_init_kwargs)
+        from .kernel.taichi import query as _impl
+        query = _impl
+    else:
+        from .query import query as _impl
+        query = _impl
 
 
 class Camera(NamedTuple):

@@ -1,2 +1,2 @@
 from .erosion import error_erosion
-from .query import reprojection
+from .query import query

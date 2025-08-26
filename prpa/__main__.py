@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import argparse
 import os
-from prpa import reconstruction, projection, render, query, warp, PRPA
+from prpa import reconstruction, projection, render, PRPA
 from prpa.prpa import set_backend
 from prpa.data import read_camera_color, read_camera_depth
 
@@ -67,13 +67,13 @@ def main(args):
         plt.show()
 
     # step 3: query (color sampling + occlusion detection) + error erosion
-    warped, mask_occluded, mask_occlude = query(target, reference, color_ref, bordermode=args.bordermode)
-    warped = warp(warped, mask_occluded, mask_occlude,
-                  kernel_size=args.kernel_size,
-                  occluded_dilation_size=args.occluded_dilation_size,
-                  occlude_dilation_size=args.occlude_dilation_size,
-                  max_iterations=args.max_iterations)  # wrap = render + error erosion
-    cv2.imwrite(args.warped + ".png", warped.cpu().numpy())  # debug
+    warped = PRPA(
+        target, reference, bordermode=args.bordermode,
+        kernel_size=args.kernel_size,
+        occluded_dilation_size=args.occluded_dilation_size,
+        occlude_dilation_size=args.occlude_dilation_size,
+        max_iterations=args.max_iterations)
+    cv2.imwrite(args.warped + ".png", warped.cpu().numpy())
 
     if args.debug:  # show error-eroded image
         import matplotlib.pyplot as plt

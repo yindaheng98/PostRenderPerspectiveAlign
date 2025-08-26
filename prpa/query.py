@@ -4,16 +4,6 @@ from .reproj import reprojection
 from .occlusion import is_occlusion
 
 
-def set_backend(backend='torch', **ti_init_kwargs):
-    global reprojection
-    if backend == 'taichi':
-        from .kernel.taichi import reprojection as _impl
-        reprojection = _impl
-    else:
-        from .reproj import reprojection as _impl
-        reprojection = _impl
-
-
 def query(target, camera, color_ref, bordermode='grid_sample'):
     """Reprojection + color sampling + occlusion detection."""
     uv, depth = reprojection(target, camera)
