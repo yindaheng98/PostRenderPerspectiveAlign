@@ -15,8 +15,8 @@ parser.add_argument("--warped", type=str, required=True, help="Index to save war
 parser.add_argument("--bordermode", type=str, default='grid_sample')
 parser.add_argument("--backend", type=str, default='taichi', choices=['torch', 'taichi'])
 parser.add_argument("--kernel-size", type=int, default=16, help="Erosion sliding window radius.")
-parser.add_argument("--occluded-dilation-size", type=int, default=1, help="Dilation size for occluded mask when selecting source pixels.")
-parser.add_argument("--occlude-dilation-size", type=int, default=1, help="Dilation size for occlude mask when selecting source pixels.")
+parser.add_argument("--occluded-dilation-size", type=int, default=0, help="Dilation size for occluded mask when selecting source pixels.")
+parser.add_argument("--occlude-dilation-size", type=int, default=0, help="Dilation size for occlude mask when selecting source pixels.")
 parser.add_argument("--max-iterations", type=int, default=None, help="Max iterations for the error erosion loop. Default: None (unlimited).")
 parser.add_argument("--debug", action="store_true")
 

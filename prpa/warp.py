@@ -14,7 +14,7 @@ def set_backend(backend='torch', **ti_init_kwargs):
         error_erosion = _impl
 
 
-def warp(warped, mask_occluded, mask_occlude, kernel_size=16, occluded_dilation_size=1, occlude_dilation_size=1, max_iterations=None):
+def warp(warped, mask_occluded, mask_occlude, kernel_size=16, occluded_dilation_size=0, occlude_dilation_size=0, max_iterations=None):
     """Error erosion loop to fill occluded regions."""
     mask_occluded = MorphologyClose(mask_occluded)
     mask_occlude = MorphologyClose(mask_occlude)

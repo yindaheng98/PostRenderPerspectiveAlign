@@ -42,7 +42,7 @@ class Reference(Camera):
         return self
 
 
-def PRPA(target: Target, reference: Reference, bordermode='grid_sample', kernel_size=16, occluded_dilation_size=1, occlude_dilation_size=1, max_iterations=None):
+def PRPA(target: Target, reference: Reference, bordermode='grid_sample', kernel_size=16, occluded_dilation_size=0, occlude_dilation_size=0, max_iterations=None):
     # step 1+2+3: reprojection + color sampling + occlusion detection
     warped, mask_occluded, mask_occlude = query(target, reference, reference.color, bordermode=bordermode)
 
