@@ -72,7 +72,7 @@ def error_erosion_kernel(
 
         # Now computing kernel_avgcolor:
         # kernel_avgcolor = (kernel_colors.sum(dim=1) / kernel_validcolorcount.unsqueeze(-1)).type(warped.dtype)
-        color_avg = ti.Vector.zero(ti.f32, MAX_CHANNELS)
+        color_avg = ti.Vector.zero(ti.u8, MAX_CHANNELS)
         for channel in ti.static(range(MAX_CHANNELS)):
             if channel < channels:
                 color_avg[channel] = ti.cast(color_sum[channel] / validcolorcount, ti.u8)
@@ -97,7 +97,7 @@ def error_erosion_kernel(
                             warped[y, x, channel] = color_avg[channel]
                     # Now clearing mask_occluded[y, x]:
                     # mask_occluded[assign_pos[..., 0], assign_pos[..., 1]] = False
-                    mask_occluded_out[y, x] = 0
+                    mask_occluded_out[y, x] = ti.cast(0, ti.u8)
                     ti.atomic_add(counter[0], 1)
 
 
