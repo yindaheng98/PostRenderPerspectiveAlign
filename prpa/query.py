@@ -7,7 +7,7 @@ from .occlusion import is_occlusion
 def set_backend(backend='torch', **ti_init_kwargs):
     global reprojection
     if backend == 'taichi':
-        from .kernel.taichi.reproj import reprojection as _impl
+        from .kernel.taichi import reprojection as _impl
         reprojection = _impl
     else:
         from .reproj import reprojection as _impl

@@ -7,7 +7,7 @@ def set_backend(backend='torch', **ti_init_kwargs):
     if backend == 'taichi':
         import taichi as ti
         ti.init(**ti_init_kwargs)
-        from .kernel.taichi.erosion import error_erosion as _impl
+        from .kernel.taichi import error_erosion as _impl
         error_erosion = _impl
     else:
         from .erosion import error_erosion as _impl
