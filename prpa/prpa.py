@@ -1,6 +1,6 @@
 from typing import NamedTuple
 import torch
-from .proj import reprojection
+from .reproj import reprojection
 from .warp import warp
 
 
