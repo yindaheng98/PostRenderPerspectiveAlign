@@ -1,14 +1,6 @@
 import torch
 
 
-def count(uv, height, width):
-    """Count on each pixel on reference image: how many point projected to this pixel?"""
-    index = (uv[..., 1] * width + uv[..., 0]).reshape(-1)
-    src = torch.ones_like(index)
-    counts = torch.zeros(height*width, dtype=src.dtype, device=src.device).scatter_add_(0, index, src)
-    return counts.reshape(height, width)
-
-
 def get_min_depth(uv, depth, height, width):
     """Count on each pixel: get min depth among all point projected to this pixel"""
     index = (uv[..., 1] * width + uv[..., 0]).reshape(-1)
@@ -24,41 +16,19 @@ no_gaussian_depth = 6e4
 def is_occlusion(uv, depth, height, width):
     """Detect whether the pixel is occluded by others when project to another camera"""
 
-    # 与其他点有重合的点
-    counts_onref = count(uv, height, width)
-    # counts_onloc: 对于local rendered image上的每个点，在投影到reference image上后，有多少个点和它重合？
-    counts_onloc = counts_onref[uv[..., 1], uv[..., 0]]
-    mask_overlap = counts_onloc > 1
-
     # 投影到reference image上各像素处的最小深度
     mindepth_onref = get_min_depth(uv, depth, height, width)
     # mindepth_onloc: 对于local rendered image上的每个点，在投影到reference image上后，所有和它重合的点的深度的最小值是多少？
     mindepth_onloc = mindepth_onref[uv[..., 1], uv[..., 0]]
 
-    # 图像边缘的点不算在重合点中
-    uv_tmp = uv[mask_overlap, ...]
-    mask_tmp = mask_overlap[mask_overlap]
-    mask_tmp[torch.logical_or(uv_tmp[..., 0] <= 0, uv_tmp[..., 0] >= width-1)] = False
-    mask_tmp[torch.logical_or(uv_tmp[..., 1] <= 0, uv_tmp[..., 1] >= height-1)] = False
-    mask_overlap[mask_overlap.clone()] = mask_tmp
+    # 排除图像边缘和无Gaussian的点
+    mask_valid = (uv[..., 0] > 0) & (uv[..., 0] < width - 1) & \
+                 (uv[..., 1] > 0) & (uv[..., 1] < height - 1) & \
+                 (depth <= no_gaussian_depth)
 
-    # 无Gaussian的点不算在重合点中
-    mask_overlap[depth > no_gaussian_depth] = False
-
-    # 计算深度差，用于区分重合点中：1、哪些点被其他点遮挡了；2、哪些点遮挡了其他点
-    depthdiff = torch.abs(depth[mask_overlap] - mindepth_onloc[mask_overlap])
-    # import matplotlib.pyplot as plt
-    # fig = plt.figure(figsize=(16, 12))
-    # ax = fig.subplots()
-    # counts, bins = np.histogram(depthdiff.clamp_max(1).cpu().numpy(), bins=100)
-    # ax.hist(bins[:-1], bins, weights=counts)
-    # plt.show()
-
-    # 判定哪些点被其他点遮挡了：1、重合点；2、和最小深度之差大于阈值
-    mask_tmp = mask_overlap[mask_overlap]
-    mask_tmp[depthdiff < depth_diff_thr_for_occlusion] = False
-    mask_occluded = mask_overlap.clone()
-    mask_occluded[mask_overlap] = mask_tmp
+    # 判定遮挡：和最小深度之差大于阈值
+    depthdiff = torch.abs(depth - mindepth_onloc)
+    mask_occluded = mask_valid & (depthdiff >= depth_diff_thr_for_occlusion)
 
     # 判定哪些点遮挡了其他点：1、在reference image上和被遮挡点重合；2、未被判定为被遮挡点
     pos_occluded_onref = uv[mask_occluded, ...]  # 所有在local rendered image上判定为被遮挡的点在reference image上的位置

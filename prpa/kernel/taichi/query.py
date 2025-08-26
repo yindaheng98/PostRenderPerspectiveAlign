@@ -13,7 +13,6 @@ def reproject_and_scatter_kernel(
     warped: ti.types.ndarray(dtype=ti.u8, ndim=3),
     uv_idx: ti.types.ndarray(dtype=ti.i32, ndim=3),
     z_out: ti.types.ndarray(dtype=ti.f32, ndim=2),
-    counts_onref: ti.types.ndarray(dtype=ti.i32, ndim=2),
     mindepth_onref: ti.types.ndarray(dtype=ti.f32, ndim=2),
     channels: ti.i32,
     height: ti.i32,
@@ -52,8 +51,7 @@ def reproject_and_scatter_kernel(
             if c < channels:
                 warped[i, j, c] = color_ref[uv_iy, uv_ix, c]
 
-        # scatter count and min depth for occlusion detection
-        ti.atomic_add(counts_onref[uv_iy, uv_ix], 1)
+        # scatter min depth for occlusion detection
         ti.atomic_min(mindepth_onref[uv_iy, uv_ix], uvz_z)
 
 
@@ -61,7 +59,6 @@ def reproject_and_scatter_kernel(
 def occlusion_kernel(
     uv_idx: ti.types.ndarray(dtype=ti.i32, ndim=3),
     depth: ti.types.ndarray(dtype=ti.f32, ndim=2),
-    counts_onref: ti.types.ndarray(dtype=ti.i32, ndim=2),
     mindepth_onref: ti.types.ndarray(dtype=ti.f32, ndim=2),
     mask_occluded: ti.types.ndarray(dtype=ti.u8, ndim=2),
     mask_occluded_onref: ti.types.ndarray(dtype=ti.u8, ndim=2),
@@ -74,25 +71,20 @@ def occlusion_kernel(
         uv_ix = uv_idx[i, j, 0]
         uv_iy = uv_idx[i, j, 1]
 
-        # counts_onloc: 对于local rendered image上的每个点，在投影到reference image上后，有多少个点和它重合？
-        counts_onloc = counts_onref[uv_iy, uv_ix]
-        # mindepth_onloc: 对于local rendered image上的每个点，在投影到reference image上后，所有和它重合的点的深度的最小值是多少？
         mindepth_onloc = mindepth_onref[uv_iy, uv_ix]
 
-        # mask_overlap: 与其他点有重合的点，排除图像边缘和无Gaussian的点
-        mask_overlap = 1
-        if counts_onloc <= 1:
-            mask_overlap = 0
+        # 排除图像边缘和无Gaussian的点
+        mask_valid = 1
         if uv_ix <= 0 or uv_ix >= width - 1:
-            mask_overlap = 0
+            mask_valid = 0
         if uv_iy <= 0 or uv_iy >= height - 1:
-            mask_overlap = 0
+            mask_valid = 0
         if depth[i, j] > no_gaussian_depth:
-            mask_overlap = 0
+            mask_valid = 0
 
-        # 判定哪些点被其他点遮挡了：1、重合点；2、和最小深度之差大于阈值
+        # 判定遮挡：和最小深度之差大于阈值
         depthdiff = ti.abs(depth[i, j] - mindepth_onloc)
-        is_occluded = mask_overlap == 1 and depthdiff >= depth_diff_thr_for_occlusion
+        is_occluded = mask_valid == 1 and depthdiff >= depth_diff_thr_for_occlusion
 
         mask_occluded[i, j] = ti.cast(ti.i32(is_occluded), ti.u8)
         if is_occluded:
@@ -118,24 +110,23 @@ def query(target, camera, color_ref, bordermode='grid_sample'):
     warped = torch.empty((*depth.shape, channels), dtype=color_ref.dtype, device=depth.device)
     uv_idx = torch.empty((*depth.shape, 2), dtype=torch.int32, device=depth.device)
     z_out = torch.empty(depth.shape, dtype=torch.float32, device=depth.device)
-    counts_onref = torch.zeros((height, width), dtype=torch.int32, device=depth.device)
     mindepth_onref = torch.full((height, width), float('inf'), dtype=torch.float32, device=depth.device)
 
-    # Kernel 1: reproject + nearest-neighbor warp + scatter count/mindepth
+    # Kernel 1: reproject + nearest-neighbor warp + scatter mindepth
     reproject_and_scatter_kernel(
         depth, M, t, color_ref,
         warped, uv_idx, z_out,
-        counts_onref, mindepth_onref,
+        mindepth_onref,
         channels, height, width,
     )
 
-    # Kernel 2: gather count/mindepth → compute mask_occluded → scatter mask_occluded_onref
+    # Kernel 2: gather mindepth → compute mask_occluded → scatter mask_occluded_onref
     mask_occluded = torch.empty(depth.shape, dtype=torch.uint8, device=depth.device)
     mask_occluded_onref = torch.zeros((height, width), dtype=torch.uint8, device=depth.device)
 
     occlusion_kernel(
         uv_idx, z_out,
-        counts_onref, mindepth_onref,
+        mindepth_onref,
         mask_occluded, mask_occluded_onref,
         height, width,
         float(depth_diff_thr_for_occlusion), float(no_gaussian_depth),
