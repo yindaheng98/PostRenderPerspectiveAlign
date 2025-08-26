@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import argparse
 import os
-from prpa import reconstruction, projection, render, warp, PRPA
+from prpa import reconstruction, projection, render, query, warp, PRPA
 from prpa.prpa import set_backend
 from prpa.data import read_camera_color, read_camera_depth
 
@@ -66,8 +66,9 @@ def main(args):
         fig.tight_layout(pad=5)
         plt.show()
 
-    # step 3: error erosion
-    warped = warp(uv, color_ref, z, bordermode=args.bordermode,
+    # step 3: query (color sampling + occlusion detection) + error erosion
+    warped, mask_occluded, mask_occlude = query(target, reference, color_ref, bordermode=args.bordermode)
+    warped = warp(warped, mask_occluded, mask_occlude,
                   kernel_size=args.kernel_size,
                   occluded_dilation_size=args.occluded_dilation_size,
                   occlude_dilation_size=args.occlude_dilation_size,
@@ -117,6 +118,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.backend == 'taichi':
         import taichi as ti
-        set_backend('taichi', arch=ti.cuda, offline_cache=False)
+        set_backend('taichi', arch=ti.cuda)
     with torch.device("cuda"):
         main(args)
