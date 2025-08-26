@@ -1,7 +1,6 @@
 from typing import NamedTuple
 import torch
-from .recon import reconstruction
-from .proj import projection
+from .proj import reprojection
 from .warp import warp
 
 
@@ -30,13 +29,9 @@ class Reference(Camera):
 
 
 def PRPA(target: Target, reference: Reference, bordermode='grid_sample', kernel_size=16, occluded_dilation_size=1, occlude_dilation_size=1, max_iterations=None):
-    # step 1: reconstruct 3D point cloud from local rendered image (image space `uv` to 3D space `xyz`)
-    K, R_c2w, T_c2w, depth = target.K, target.R, target.T, target.depth
-    xyz = reconstruction(K, R_c2w, T_c2w, depth)  # xyz[uv on local rendered image] = pos in 3D space
-
-    # step 2: project 3D point cloud to reference image (3D space `xyz` to image space `uv`)
-    K_r, R_r, t_r, color_ref = reference.K, reference.R, reference.T, reference.color
-    uv, z = projection(K_r, R_r, t_r, xyz)  # uv[uv on local rendered image] = uv on reference
+    # step 1+2: reconstruct 3D point cloud and project to reference image
+    uv, z = reprojection(target, reference)
+    color_ref = reference.color
 
     # step 3: render image at local viewport according to projected `uv` and reference color (get color at `uv`)
     warped = warp(
