@@ -5,6 +5,18 @@ from .morph import MorphologyClose
 from .erosion import error_erosion
 
 
+def set_backend(backend='torch', **ti_init_kwargs):
+    global error_erosion
+    if backend == 'taichi':
+        import taichi as ti
+        ti.init(**ti_init_kwargs)
+        from .kernel.taichi.erosion import error_erosion as _impl
+        error_erosion = _impl
+    else:
+        from .erosion import error_erosion as _impl
+        error_erosion = _impl
+
+
 def warp(uv, color_ref, depth, bordermode='grid_sample'):
     height, width = color_ref.shape[:2]
     uv_idx = uv[..., :2]

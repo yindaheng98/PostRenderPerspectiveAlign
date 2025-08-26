@@ -4,6 +4,7 @@ import torch
 import argparse
 import os
 from prpa import reconstruction, projection, render, warp, PRPA
+from prpa.warp import set_backend
 from prpa.data import read_camera_color, read_camera_depth
 
 
@@ -12,6 +13,7 @@ parser.add_argument("--local", type=str, required=True, help="Index of locally r
 parser.add_argument("--reference", type=str, required=True, help="Index of reference image.")
 parser.add_argument("--warped", type=str, required=True, help="Index to save warped image.")
 parser.add_argument("--bordermode", type=str, default='grid_sample')
+parser.add_argument("--backend", type=str, default='taichi', choices=['torch', 'taichi'])
 parser.add_argument("--debug", action="store_true")
 
 
@@ -91,5 +93,8 @@ def main(args):
 
 if __name__ == "__main__":
     args = parser.parse_args()
+    if args.backend == 'taichi':
+        import taichi as ti
+        set_backend('taichi', arch=ti.cuda, offline_cache=False)
     with torch.device("cuda"):
         main(args)
