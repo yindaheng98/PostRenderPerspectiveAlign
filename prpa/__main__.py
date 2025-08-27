@@ -13,7 +13,7 @@ parser.add_argument("--local", type=str, required=True, help="Index of locally r
 parser.add_argument("--reference", type=str, required=True, help="Index of reference image.")
 parser.add_argument("--warped", type=str, required=True, help="Index to save warped image.")
 parser.add_argument("--bordermode", type=str, default='grid_sample')
-parser.add_argument("--backend", type=str, default='taichi', choices=['torch', 'taichi'])
+parser.add_argument("--backend", type=str, default='taichi', choices=['torch', 'taichi', 'cuda'])
 parser.add_argument("--kernel-size", type=int, default=16, help="Erosion sliding window radius.")
 parser.add_argument("--occluded-dilation-size", type=int, default=0, help="Dilation size for occluded mask when selecting source pixels.")
 parser.add_argument("--occlude-dilation-size", type=int, default=0, help="Dilation size for occlude mask when selecting source pixels.")
@@ -119,5 +119,7 @@ if __name__ == "__main__":
     if args.backend == 'taichi':
         import taichi as ti
         set_backend('taichi', arch=ti.cuda)
+    elif args.backend == 'cuda':
+        set_backend('cuda')
     with torch.device("cuda"):
         main(args)

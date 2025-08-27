@@ -9,6 +9,10 @@ def set_backend(backend='torch', **ti_init_kwargs):
         ti.init(**ti_init_kwargs)
         from .kernel.taichi import error_erosion as _impl
         error_erosion = _impl
+    elif backend == 'cuda':
+        from .kernel.taichi import error_erosion as _impl, set_backend as set_kernel_backend
+        set_kernel_backend(cuda=True)
+        error_erosion = _impl
     else:
         from .erosion import error_erosion as _impl
         error_erosion = _impl
