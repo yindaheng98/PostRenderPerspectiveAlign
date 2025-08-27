@@ -5,8 +5,8 @@ from .warp import warp
 
 
 def set_backend(backend='torch', **ti_init_kwargs):
-    from .warp import set_backend as set_warp_backend
-    set_warp_backend(backend, **ti_init_kwargs)
+    from .erosionall import set_backend as set_erosion_backend
+    set_erosion_backend(backend, **ti_init_kwargs)
     global query
     if backend == 'taichi':
         import taichi as ti
