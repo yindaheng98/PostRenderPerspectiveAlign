@@ -1,5 +1,6 @@
 import taichi as ti
 import torch
+from .common import clamp_index
 
 MAX_CHANNELS = 4
 
@@ -39,8 +40,8 @@ def reproject_and_scatter_kernel(
         uv_x = uvz_x / uvz_z
         uv_y = uvz_y / uvz_z
 
-        uv_ix = ti.min(ti.max(ti.cast(ti.round(uv_x), ti.i32), 0), width - 1)
-        uv_iy = ti.min(ti.max(ti.cast(ti.round(uv_y), ti.i32), 0), height - 1)
+        uv_ix = clamp_index(ti.cast(ti.round(uv_x), ti.i32), width)
+        uv_iy = clamp_index(ti.cast(ti.round(uv_y), ti.i32), height)
 
         uv_idx[i, j, 0] = uv_ix
         uv_idx[i, j, 1] = uv_iy
