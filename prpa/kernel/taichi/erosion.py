@@ -1,9 +1,7 @@
 import taichi as ti
 import torch
 from .morph import MorphologyDilation
-from .common import clamp_index
-
-MAX_CHANNELS = 4
+from .common import clamp_index, MAX_CHANNELS
 
 
 @ti.kernel
