@@ -92,6 +92,9 @@ def occlusion_kernel(
 
 def query(target, camera, color_ref, bordermode='grid_sample'):
     """Fused reprojection + nearest-neighbor color sampling + occlusion detection."""
+    from . import use_cuda
+    if use_cuda:
+        from . import _C
     from ...occlusion import depth_diff_thr_for_occlusion, no_gaussian_depth
 
     K, R_c2w, T_c2w, depth = target.K, target.R, target.T, target.depth
@@ -112,7 +115,7 @@ def query(target, camera, color_ref, bordermode='grid_sample'):
     mindepth_onref = torch.full((height, width), float('inf'), dtype=torch.float32, device=depth.device)
 
     # Kernel 1: reproject + nearest-neighbor warp + scatter mindepth
-    reproject_and_scatter_kernel(
+    (_C.reproject_and_scatter if use_cuda else reproject_and_scatter_kernel)(
         depth, M, t, color_ref,
         warped, uv_idx, z_out,
         mindepth_onref,
@@ -123,7 +126,7 @@ def query(target, camera, color_ref, bordermode='grid_sample'):
     mask_occluded = torch.empty(depth.shape, dtype=torch.uint8, device=depth.device)
     mask_occluded_onref = torch.zeros((height, width), dtype=torch.uint8, device=depth.device)
 
-    occlusion_kernel(
+    (_C.occlusion if use_cuda else occlusion_kernel)(
         uv_idx, z_out,
         mindepth_onref,
         mask_occluded, mask_occluded_onref,

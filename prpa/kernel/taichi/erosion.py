@@ -96,6 +96,10 @@ def error_erosion_kernel(
 
 
 def error_erosion(warped, mask_occluded, mask_occlude, mask_occlude_dilated, kernel_size=5, occluded_dilation_size=0):
+    from . import use_cuda
+    if use_cuda:
+        from . import _C
+
     assert warped.dim() == 3
     assert warped.shape[2] <= MAX_CHANNELS
     assert mask_occluded.dim() == mask_occlude.dim() == 2
@@ -125,7 +129,7 @@ def error_erosion(warped, mask_occluded, mask_occlude, mask_occlude_dilated, ker
     mask_occlude_dilated_u8 = mask_occlude_dilated.to(torch.uint8).contiguous()
     counter = torch.zeros(1, device=warped.device, dtype=torch.int32)
 
-    error_erosion_kernel(
+    (_C.error_erosion if use_cuda else error_erosion_kernel)(
         edge_pos, warped_out,
         mask_occluded_u8, mask_occlude_u8,
         mask_occluded_dilated_u8, mask_occlude_dilated_u8,
