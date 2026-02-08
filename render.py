@@ -43,6 +43,8 @@ def rendering(dataset: CameraDataset, gaussians: GaussianModel, render_path: str
     makedirs(render_path, exist_ok=True)
     camera_dicts = convert_dataset(dataset, fix_width, fix_height, fix_width_focal, fix_height_focal)
     pbar = tqdm(camera_dicts, desc="Rendering progress")
+    start_events = []
+    end_events = []
     for idx, camera_dict in enumerate(pbar):
         ground_truth_image_path = camera_dict["ground_truth_image_path"]
         camera_dict['ground_truth_image_path'] = None
@@ -50,7 +52,13 @@ def rendering(dataset: CameraDataset, gaussians: GaussianModel, render_path: str
         camera_dict['ground_truth_depth_path'] = None
         camera_dict['ground_truth_depth_mask_path'] = None
         camera = dict2camera(camera_dict, device=camera_dict["device"], custom_data=camera_dict["custom_data"])
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+        start_event.record()
         out = gaussians(camera)
+        end_event.record()
+        start_events.append(start_event)
+        end_events.append(end_event)
         rendering = out["render"]
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
         depth = 1 / out["invdepth"]
@@ -58,6 +66,9 @@ def rendering(dataset: CameraDataset, gaussians: GaussianModel, render_path: str
         torchvision.utils.save_image(colorify_depth(depth), os.path.join(render_path, '{0:05d}'.format(idx) + ".depth.png"))
         with open(os.path.join(render_path, '{0:05d}'.format(idx) + ".camera.json"), "w") as f:
             json.dump(camera2dict(camera._replace(ground_truth_image_path=ground_truth_image_path), idx), f, indent=2)
+    torch.cuda.synchronize()
+    times = [s.elapsed_time(e) for s, e in zip(start_events, end_events)]
+    print(f"Rendering timing: total={sum(times):.2f}ms, avg={sum(times)/len(times):.2f}ms, min={min(times):.2f}ms, max={max(times):.2f}ms, count={len(times)}")
 
 
 if __name__ == "__main__":
