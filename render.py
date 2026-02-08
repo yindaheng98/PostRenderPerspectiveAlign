@@ -44,18 +44,20 @@ def rendering(dataset: CameraDataset, gaussians: GaussianModel, render_path: str
     camera_dicts = convert_dataset(dataset, fix_width, fix_height, fix_width_focal, fix_height_focal)
     pbar = tqdm(camera_dicts, desc="Rendering progress")
     for idx, camera_dict in enumerate(pbar):
+        ground_truth_image_path = camera_dict["ground_truth_image_path"]
         camera_dict['ground_truth_image_path'] = None
+        camera_dict['ground_truth_image_mask_path'] = None
         camera_dict['ground_truth_depth_path'] = None
         camera_dict['ground_truth_depth_mask_path'] = None
         camera = dict2camera(camera_dict, device=camera_dict["device"], custom_data=camera_dict["custom_data"])
         out = gaussians(camera)
         rendering = out["render"]
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
-        depth = 1 / out["depth"]
+        depth = 1 / out["invdepth"]
         np.savez_compressed(os.path.join(render_path, '{0:05d}'.format(idx) + ".depth.npz"), depth=depth.type(torch.float16).cpu().numpy())
         torchvision.utils.save_image(colorify_depth(depth), os.path.join(render_path, '{0:05d}'.format(idx) + ".depth.png"))
         with open(os.path.join(render_path, '{0:05d}'.format(idx) + ".camera.json"), "w") as f:
-            json.dump(camera2dict(camera, idx), f, indent=2)
+            json.dump(camera2dict(camera._replace(ground_truth_image_path=ground_truth_image_path), idx), f, indent=2)
 
 
 if __name__ == "__main__":
