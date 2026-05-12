@@ -13,7 +13,7 @@ if os.name == 'nt':
     nvcc_compiler_flags.append("-allow-unsupported-compiler")
 
 setup(
-    name="prpa",
+    name="PostRenderPerspectiveAlign",
     packages=find_packages(),
     ext_modules=[
         CUDAExtension(

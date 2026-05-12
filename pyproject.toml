@@ -3,7 +3,7 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "prpa"
+name = "PostRenderPerspectiveAlign"
 version = "1.2.2"
 description = "Post-Render Perspective Align"
 readme = "README.md"
@@ -11,10 +11,12 @@ authors = [{ name = "yindaheng98", email = "yindaheng98@gmail.com" }]
 classifiers = ["Programming Language :: Python :: 3"]
 urls = { Homepage = "https://github.com/yindaheng98/PostRenderPerspectiveAlign" }
 requires-python = ">=3"
+dependencies = ["torch", "opencv-python", "numpy"]
 
 [project.optional-dependencies]
 data = ["opencv-python", "numpy", "open3d"]
 render = ["gaussian-splatting"]
+taichi = ["taichi"]
 
 # --- Setuptools-specific tables ---------------------------------------------
 
