@@ -3,11 +3,22 @@ import torch
 from .morph import MorphologyDilation
 from .common import clamp_index, MAX_CHANNELS
 
+TORCH_TO_TI = {
+    torch.uint8: ti.u8,
+    torch.int8: ti.i8,
+    torch.int16: ti.i16,
+    torch.int32: ti.i32,
+    torch.int64: ti.i64,
+    torch.float16: ti.f16,
+    torch.float32: ti.f32,
+    torch.float64: ti.f64,
+}
+
 
 @ti.kernel
 def error_erosion_kernel(
     edge_pos: ti.types.ndarray(dtype=ti.i32, ndim=2),
-    warped: ti.types.ndarray(dtype=ti.u8, ndim=3),
+    warped: ti.types.ndarray(ndim=3),
     mask_occluded: ti.types.ndarray(dtype=ti.u8, ndim=2),
     mask_occlude: ti.types.ndarray(dtype=ti.u8, ndim=2),
     mask_occluded_dilated: ti.types.ndarray(dtype=ti.u8, ndim=2),
@@ -18,6 +29,7 @@ def error_erosion_kernel(
     width: ti.i32,
     channels: ti.i32,
     kernel_size: ti.i32,
+    color_dtype: ti.template(),
 ):
     ti.loop_config(block_dim=256)
     for edge_idx in range(edge_pos.shape[0]):
@@ -66,10 +78,10 @@ def error_erosion_kernel(
 
         # Now computing kernel_avgcolor:
         # kernel_avgcolor = (kernel_colors.sum(dim=1) / kernel_validcolorcount.unsqueeze(-1)).type(warped.dtype)
-        color_avg = ti.Vector.zero(ti.u8, MAX_CHANNELS)
+        color_avg = ti.Vector.zero(color_dtype, MAX_CHANNELS)
         for channel in ti.static(range(MAX_CHANNELS)):
             if channel < channels:
-                color_avg[channel] = ti.cast(color_sum[channel] / validcolorcount, ti.u8)
+                color_avg[channel] = ti.cast(color_sum[channel] / validcolorcount, color_dtype)
 
         # Phase 2: Scatter - write average color to target pixels
         for dy in range(-kernel_size, kernel_size + 1):
@@ -129,13 +141,22 @@ def error_erosion(warped, mask_occluded, mask_occlude, mask_occlude_dilated, ker
     mask_occlude_dilated_u8 = mask_occlude_dilated.to(torch.uint8).contiguous()
     counter = torch.zeros(1, device=warped.device, dtype=torch.int32)
 
-    (_C.error_erosion if use_cuda else error_erosion_kernel)(
-        edge_pos, warped_out,
-        mask_occluded_u8, mask_occlude_u8,
-        mask_occluded_dilated_u8, mask_occlude_dilated_u8,
-        mask_occluded_out,
-        counter, height, width, warped.shape[2], kernel_size,
-    )
+    if use_cuda:
+        _C.error_erosion(
+            edge_pos, warped_out,
+            mask_occluded_u8, mask_occlude_u8,
+            mask_occluded_dilated_u8, mask_occlude_dilated_u8,
+            mask_occluded_out,
+            counter, height, width, warped.shape[2], kernel_size,
+        )
+    else:
+        error_erosion_kernel(
+            edge_pos, warped_out,
+            mask_occluded_u8, mask_occlude_u8,
+            mask_occluded_dilated_u8, mask_occlude_dilated_u8,
+            mask_occluded_out,
+            counter, height, width, warped.shape[2], kernel_size, TORCH_TO_TI[warped.dtype],
+        )
 
     validcount = int(counter.item())
     if validcount > 0:
