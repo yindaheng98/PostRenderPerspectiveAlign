@@ -1,4 +1,5 @@
 #include <torch/extension.h>
+#include <ATen/Dispatch.h>
 #include "common.cuh"
 #include "query.h"
 
@@ -12,12 +13,13 @@ __device__ __forceinline__ void atomicMinFloat(float* addr, float val) {
     } while (assumed != old);
 }
 
+template <typename scalar_t>
 __global__ void reproject_and_scatter_kernel(
     const float* __restrict__ depth,
     const float* __restrict__ M,
     const float* __restrict__ t,
-    const uint8_t* __restrict__ color_ref,
-    uint8_t* __restrict__ warped,
+    const scalar_t* __restrict__ color_ref,
+    scalar_t* __restrict__ warped,
     int32_t* __restrict__ uv_idx,
     float* __restrict__ z_out,
     float* __restrict__ mindepth_onref,
@@ -73,17 +75,19 @@ void reproject_and_scatter_cuda(
     int threads = 256;
     int blocks = (total + threads - 1) / threads;
 
-    reproject_and_scatter_kernel<<<blocks, threads>>>(
-        depth.data_ptr<float>(),
-        M.data_ptr<float>(),
-        t.data_ptr<float>(),
-        color_ref.data_ptr<uint8_t>(),
-        warped.data_ptr<uint8_t>(),
-        uv_idx.data_ptr<int32_t>(),
-        z_out.data_ptr<float>(),
-        mindepth_onref.data_ptr<float>(),
-        channels, height, width,
-        depth_h, depth_w);
+    AT_DISPATCH_ALL_TYPES_AND(at::ScalarType::Half, color_ref.scalar_type(), "reproject_and_scatter_cuda", ([&] {
+        reproject_and_scatter_kernel<scalar_t><<<blocks, threads>>>(
+            depth.data_ptr<float>(),
+            M.data_ptr<float>(),
+            t.data_ptr<float>(),
+            color_ref.data_ptr<scalar_t>(),
+            warped.data_ptr<scalar_t>(),
+            uv_idx.data_ptr<int32_t>(),
+            z_out.data_ptr<float>(),
+            mindepth_onref.data_ptr<float>(),
+            channels, height, width,
+            depth_h, depth_w);
+    }));
 }
 
 __global__ void occlusion_kernel(

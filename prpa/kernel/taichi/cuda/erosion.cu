@@ -1,10 +1,12 @@
 #include <torch/extension.h>
+#include <ATen/Dispatch.h>
 #include "common.cuh"
 #include "erosion.h"
 
+template <typename scalar_t>
 __global__ void error_erosion_kernel(
     const int32_t* __restrict__ edge_pos,
-    uint8_t* __restrict__ warped,
+    scalar_t* __restrict__ warped,
     const uint8_t* __restrict__ mask_occluded,
     const uint8_t* __restrict__ mask_occlude,
     const uint8_t* __restrict__ mask_occluded_dilated,
@@ -40,9 +42,9 @@ __global__ void error_erosion_kernel(
 
     if (validcount <= 0) return;
 
-    uint8_t color_avg[MAX_CHANNELS];
+    scalar_t color_avg[MAX_CHANNELS];
     for (int c = 0; c < channels && c < MAX_CHANNELS; c++) {
-        color_avg[c] = (uint8_t)(color_sum[c] / validcount);
+        color_avg[c] = static_cast<scalar_t>(color_sum[c] / validcount);
     }
 
     // Phase 2: scatter average color to occluded pixels
@@ -77,15 +79,17 @@ void error_erosion_cuda(
     int threads = 256;
     int blocks = (num_edges + threads - 1) / threads;
 
-    error_erosion_kernel<<<blocks, threads>>>(
-        edge_pos.data_ptr<int32_t>(),
-        warped.data_ptr<uint8_t>(),
-        mask_occluded.data_ptr<uint8_t>(),
-        mask_occlude.data_ptr<uint8_t>(),
-        mask_occluded_dilated.data_ptr<uint8_t>(),
-        mask_occlude_dilated.data_ptr<uint8_t>(),
-        mask_occluded_out.data_ptr<uint8_t>(),
-        counter.data_ptr<int32_t>(),
-        height, width, channels, kernel_size,
-        num_edges);
+    AT_DISPATCH_ALL_TYPES_AND(at::ScalarType::Half, warped.scalar_type(), "error_erosion_cuda", ([&] {
+        error_erosion_kernel<scalar_t><<<blocks, threads>>>(
+            edge_pos.data_ptr<int32_t>(),
+            warped.data_ptr<scalar_t>(),
+            mask_occluded.data_ptr<uint8_t>(),
+            mask_occlude.data_ptr<uint8_t>(),
+            mask_occluded_dilated.data_ptr<uint8_t>(),
+            mask_occlude_dilated.data_ptr<uint8_t>(),
+            mask_occluded_out.data_ptr<uint8_t>(),
+            counter.data_ptr<int32_t>(),
+            height, width, channels, kernel_size,
+            num_edges);
+    }));
 }
