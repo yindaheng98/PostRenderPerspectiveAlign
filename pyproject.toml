@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "PostRenderPerspectiveAlign"
-version = "1.2.2"
+version = "1.2.3"
 description = "Post-Render Perspective Align"
 readme = "README.md"
 authors = [{ name = "yindaheng98", email = "yindaheng98@gmail.com" }]
