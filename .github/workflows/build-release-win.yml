@@ -26,12 +26,12 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --upgrade pip setuptools wheel twine
       - name: Install pytorch
-        run: pip install torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 --index-url https://download.pytorch.org/whl/cu124
+        run: pip install torch==2.10.0 torchvision==0.24.0 torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu130
       - name: Setup CUDA
-        uses: Jimver/cuda-toolkit@v0.2.19
+        uses: Jimver/cuda-toolkit@v0.2.35
         id: cuda-toolkit
         with:
-          cuda: "12.4.1"
+          cuda: "13.0.1"
           method: "network"
           sub-packages: '["nvcc", "cudart"]'
       - name: Build package
